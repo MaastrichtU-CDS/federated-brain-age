@@ -4,6 +4,7 @@ from vantage6.tools.util import warn, info
 
 from federated_brain_age.constants import *
 from federated_brain_age.utils import *
+from federated_brain_age.xnat_client import retrieve_data
 
 def master(client, db_client, parameters = None):
     """
@@ -27,15 +28,24 @@ def master(client, db_client, parameters = None):
     info("Validating the input arguments")
     # TODO
 
-    # define the input for the brain age algorithm
-    info("Defining input parameters")
-    input_ = {
-        "method": "brain_age",
-        "args": [],
-        "kwargs": {
-            "parameters": parameters,
+    # Check which task has been requested
+    info(f"Task requested: {parameters[TASK]}")
+    if parameters[TASK] == CHECK:
+        input_ = {
+            "method": "check",
+            "args": [],
+            "kwargs": {
+                "parameters": parameters,
+            }
         }
-    }
+    elif parameters[TASK] == TRAIN:
+        input_ = {
+            "method": "brain_age",
+            "args": [],
+            "kwargs": {
+                "parameters": parameters,
+            }
+        }
 
     # obtain organizations that are within the collaboration
     info("Obtaining the organizations in the collaboration")
@@ -72,6 +82,28 @@ def master(client, db_client, parameters = None):
 
     return output
 
+def RPC_check():
+    """
+    Check the status of the different components:
+    - Cluster by successfully running this task;
+    - XNAT connection;
+
+    Parameters
+    ----------
+    parameters : Dict
+        Task parameters.
+
+    Returns
+    -------
+    Dict
+        Information regarding the connection to the XNAT.
+    """
+    info("Check components - Node method")
+    output = {}
+    # Check the connection to the XNAT
+
+    return output
+
 def RPC_brain_age(db_client, parameters):
     """
     Run the CNN to compute the brain age
@@ -90,7 +122,9 @@ def RPC_brain_age(db_client, parameters):
     """
     info("Brain age CNN - Node method")
     output = {}
-    # Process the cohort if included in the request
-    sql_condition = None
+    # Retrieve the data from XNAT if necessary
+    data_path = os.path.join(os.getenv(DATA_FOLDER), parameters[TASK_ID])
+    if os.getenv(XNAT_URL) and folder_exists(data_path):
+        retrieve_data(data_path)
 
     return output

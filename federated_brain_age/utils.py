@@ -19,3 +19,8 @@ def parse_error(error_message):
     return {
         ERROR: error_message 
     }
+
+def folder_exists(path):
+    """ Check if a folder exists.
+    """
+    return os.path.exists(path)
