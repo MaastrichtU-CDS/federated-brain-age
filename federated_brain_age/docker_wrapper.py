@@ -76,15 +76,13 @@ def docker_wrapper(module: str):
     db_client = None
     token = None
     if input_data.get("master"):
-        # Usually only used by the master method. But can be used
-        # by regular containers also for example to find out the node_id.
         token_file = os.environ["TOKEN_FILE"]
         info(f"Reading token file '{token_file}'")
         with open(token_file) as fp:
             token = fp.read().strip()
     else:
-        # Get the database client
-        # In this case, the master doesn't need to access the database
+        # Nodes running the algorithm
+        # - Get the database client
         info(f"Connecting to {os.getenv(PGDATABASE)}")
         try:
             connection = psycopg2.connect(PGURI)

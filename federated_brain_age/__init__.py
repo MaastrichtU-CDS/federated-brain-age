@@ -46,6 +46,14 @@ def master(client, db_client, parameters = None):
                 "parameters": parameters,
             }
         }
+    elif parameters[TASK] == PREDICT:
+        input_ = {
+            "method": "predict",
+            "args": [],
+            "kwargs": {
+                "parameters": parameters,
+            }
+        }
 
     # obtain organizations that are within the collaboration
     info("Obtaining the organizations in the collaboration")
@@ -101,6 +109,8 @@ def RPC_check():
     info("Check components - Node method")
     output = {}
     # Check the connection to the XNAT
+
+    # Check the GPU availability
 
     return output
 
