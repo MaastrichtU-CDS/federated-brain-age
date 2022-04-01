@@ -1,26 +1,8 @@
-import pandas as pd
-import os
-import numpy as np
-import nibabel as nib
-import sys
 import math
-import random
-import csv
-import nipy
-import seaborn as sns
-from datetime import datetime
-from dateutil import relativedelta
-import gc
-
-from scipy import ndimage as nd
-import scipy.stats as stats
-import matplotlib
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-from matplotlib.ticker import FormatStrFormatter
-
-import tensorflow as tf
-from tensorflow.python.framework import ops
+import nibabel as nib
+import numpy as np
+import os
+from federated_brain_age.utils import get_parameter
 
 from tensorflow import keras
 from tensorflow.keras.models import Sequential, Model
@@ -30,372 +12,172 @@ from tensorflow.keras.layers import Input, concatenate, multiply, add, Reshape, 
 from tensorflow.keras import regularizers
 from tensorflow.keras import backend as K
 
-import h5py
+from federated_brain_age.constants import *
+from federated_brain_age.image_processing import zerocrop_img
 
-IMAGE_DIR = 'path to VBM image directory'
-MASK_DIR = 'path to Mask image directory'
-MODEL_DIR = 'path to load and save model/results'
+DEFAULT_HYPERPARAMETERS = {
+    INPUT_SHAPE: (160, 192, 144, 1),
+    LEARNING_RATE: 0.001,
+    BETA1: 0.9,
+    BETA2: 0.999,
+    EPSILON: 1e-08,
+    DECAY: 1e-4,
+    USE_PADDING: True,
+    CROP_INDEXES: None,
+    AUGMENT_TRAIN: True,
+    IMG_SCALE: 1.0,
+    BATCH_SIZE: 1,
+    PATIENTS_PER_EPOCH: 4, # steps_per_epoch = patients_per_epoch/batch_size
+    EPOCHS: 4,
+}
 
-class LossHistory(keras.callbacks.Callback):
-    def __init__(self, epochs, modelversion):
-        self.ne = epochs
-        self.mv = modelversion        
-    
-    def on_train_begin(self, logs={}):
-        self.batch_num = 0
-        self.batch_losses = []
-        self.epoch_losses = []
+DEFAULT_MASK_NAME = "Brain_GM_mask_1mm_MNI_kNN_conservative.nii.gz"
 
-        print('Start training ...')
+class BrainAge:
+    def __init__(self, parameters, id):
+        """ Initialize the CNN model.
+        """
+        self.parameters = parameters
+        self.id = id
+        self.model = BrainAge.cnn_model()
+        self.model.summary()
+        self.mask = None
         
-        self.stats = ['loss'] #TODO: check
-        self.logs = [{} for _ in range(self.ne)]
+        # Load the mask if available and necessary
+        mask_path = f"{os.getenv(MODEL_FOLDER)}/{self.id}/{os.getenv(MASK_FILENAME, DEFAULT_MASK_NAME)}"
+        if USE_MASK in self.parameters and self.parameters[USE_MASK] and os.path.exists(mask_path):
+            self.mask = nib.load().get_data(mask_path)
 
-        self.evolution_file = 'evolution_'+self.mv+'.csv'
-        with open(MODEL_DIR+self.evolution_file, "w") as f:
-            f.write(';'.join(self.stats + ['val_'+s for s in self.stats]) + "\n")
-        
-        self.progress_file = 'training_progress_'+self.mv+'.out'
-        with open(MODEL_DIR+self.progress_file, "w") as f:
-            f.write('Start training ...\n')
-            
-    def on_batch_end(self, epoch, logs={}):
-        self.batch_losses.append(logs.get('loss'))
+    def get_parameter(self, parameter):
+        """ Get parameter from the parameters provided, otherwise use the
+            default value.
+        """
+        return self.parameters[parameter] if parameter in self.parameters \
+            else DEFAULT_HYPERPARAMETERS[parameter]
 
-        
-        with open(MODEL_DIR+self.progress_file, "a") as f:
-            f.write('  >> batch {} >> loss:{} \r'.format(self.batch_num, self.batch_losses[-1]))
-        
-        self.batch_num += 1
-        
-    def on_epoch_end(self, epoch, logs={}):
-        self.batch_num = 0
-        self.epoch_losses.append(logs.get('loss'))
-        
-        
-#        print('\n    >>> logs:', logs)
-        self.logs[epoch] = logs
-#        evolution_file = 'evolution_'+self.mv+'.csv'
-        loss_fig = 'loss_'+self.mv+'.png'
-        
-        with open(MODEL_DIR+self.evolution_file, "a") as myfile:
-            num_stats = len(self.stats)
-            
-            plt.figure(figsize=(40, num_stats*15))
-            plt.suptitle(loss_fig, fontsize=34, fontweight='bold')
-
-            gs = gridspec.GridSpec(len(self.stats), 2) 
-
-            last_losses = []
-            last_val_losses = []
-            for idx, stat in enumerate(self.stats):
-                losses = [self.logs[e][stat] for e in range(epoch+1)]
-                last_losses.append('{}'.format(losses[-1]))
-                val_losses = [self.logs[e]['val_'+stat] for e in range(epoch+1)]
-                last_val_losses.append('{}'.format(val_losses[-1]))
-
-                plt.subplot(gs[idx,0])
-                plt.ylabel(stat, fontsize=34)
-                plt.plot(range(0, epoch+1), losses, '-', color = 'b')
-                plt.plot(range(0, epoch+1), val_losses, '-', color = 'r')
-                plt.tick_params(axis='x', labelsize=30)
-                plt.tick_params(axis='y', labelsize=30)
-                plt.grid(True)
-
-                recent_n = 10
-                recent_losses = losses[-recent_n:]
-                recent_val_losses = val_losses[-recent_n:]
-                miny_range = 5
-                lowery = min([min(losses), recent_losses[-1]-miny_range, min(val_losses), recent_val_losses[-1]-miny_range])
-                uppery = max([max(recent_losses), recent_losses[-1]+miny_range, max(recent_val_losses), recent_val_losses[-1]+miny_range])
-                plt.subplot(gs[idx,1])
-                plt.ylabel(stat, fontsize=34)
-                plt.plot(range(0, epoch+1), losses, '-', color = 'b')
-                plt.plot(range(0, epoch+1), val_losses, '-', color = 'r')
-                plt.ylim(lowery, uppery)
-                plt.tick_params(axis='x', labelsize=30)
-                plt.tick_params(axis='y', labelsize=30)
-                plt.grid(True)
-                
-            myfile.write(';'.join(last_losses + last_val_losses) + '\n')
-            try:                
-                plt.savefig(MODEL_DIR+loss_fig)
-            except Exception as inst:
-                print(type(inst))
-                print(inst)
-            plt.close()
-        
-
-        with open(MODEL_DIR+self.progress_file, "a") as f:
-            f.write('epoch {}/{}:\n'.format(epoch, self.ne))
-            for idx, stat in enumerate(self.stats):
-                f.write('  {} = {}\n  val_{} = {}\n'.format(stat, last_losses[idx], stat, last_val_losses[idx]))
-
-        gc.collect()
-
-def save_model(name, model):
-    model_file = 'model_'+name+'.json'
-    # serialize model to JSON
-    with open(MODEL_DIR+model_file, 'w') as json_file:
-        json_file.write(model.to_json())
-    print('Saved model to '+MODEL_DIR+model_file)
-
-#save the best model on validation set
-def save_checkpoint(name, model):
-    save_model(name, model)
-    weights_file = 'model_'+name+'.h5'
-    return ModelCheckpoint(MODEL_DIR+weights_file, monitor='val_loss', verbose=0, save_best_only=True, mode='auto')
-
-def save_history(name, history, score, sets, distrs):
-    history_file = 'history_'+name+'.h5'
-
-    f = h5py.File(MODEL_DIR+history_file, 'w')
-
-    f.create_dataset('batch_losses', data=history.batch_losses)
-    f.create_dataset('epoch_losses', data=history.epoch_losses)
-    f.create_dataset("score", data=score)
-
-    f.close()
-
-    print('Saved history to '+MODEL_DIR+history_file)
-
-class imgZeropad:
-
-    def __init__(self, img, use_padding=False):
-        self.set_crop(img, use_padding)
-    
-    #set crop locations
-    def set_crop(self, img, use_padding=False):
-        # argwhere will give you the coordinates of every non-zero point
-        true_data = np.argwhere(img)
-        # take the smallest points and use them as the top left of your crop
-        top_left = true_data.min(axis=0)
-        # take the largest points and use them as the bottom right of your crop
-        bottom_right = true_data.max(axis=0)
-        crop_indeces = [top_left, bottom_right+1]  # plus 1 because slice isn't inclusive
-
-        print('crop set to x[{}:{}], y[{}:{}], z[{}:{}]'.format(crop_indeces[0][0], crop_indeces[1][0], 
-                                                                crop_indeces[0][1], crop_indeces[1][1], 
-                                                                crop_indeces[0][2], crop_indeces[1][2]))
-
-        if use_padding == True:
-            shape = crop_indeces[1]-crop_indeces[0]
-            bottom_net = shape.astype(float)/2/2**3
-            top_net = np.ceil(bottom_net)*2*2**3
-            padding = (top_net-shape)/2
-            print('applying [{},{},{}] padding to image..'.format(padding[0], padding[1], padding[2]))
-            padding_l = padding.astype(int)
-            padding_r = np.ceil(padding).astype(int)
-            crop_indeces[0] -= padding_l
-            crop_indeces[1] += padding_r
-
-            print('crop set to x[{}:{}], y[{}:{}], z[{}:{}]'.format(crop_indeces[0][0], crop_indeces[1][0], 
-                                                                    crop_indeces[0][1], crop_indeces[1][1], 
-                                                                    crop_indeces[0][2], crop_indeces[1][2]))
+    def initialize(self):
+        """ Initialize and load the necessary information.
+        """
+        if self.mask:
+            # when applying a mask, initialize zerocropping
+            img_size = np.array(np.array(zerocrop_img(self.mask, True, padding=self.get_parameter(USE_PADDING))).shape)
         else:
-            padding = np.zeros(3)
-        self.crop_indeces = crop_indeces
-        self.padding = padding
+            # TODO: Getting the first scan may require some changes in the data folder path
+            img_size = np.array(np.array(nib.load(os.getenv(DATA_FOLDER) + os.listdir(os.getenv(DATA_FOLDER))[0]).get_data()).shape)
+        return [int(math.ceil(img_d)) for img_d in img_size * self.get_parameter(IMG_SCALE)]
+
+    def cnn_model(self):
+        """ Define the CNN mode.
+        """
+        input1 = Input(self.get_parameter(INPUT_SHAPE))
+
+        c1 = Conv3D(32, kernel_size=(5,5,5), strides=(2,2,2), padding=PADDING_SAME)(input1)
+        c1 = BatchNormalization()(c1)
+        c1 = Activation(RELU)(c1)
         
-        shape = crop_indeces[1]-crop_indeces[0]
-        self.img_size = (shape[0], shape[1], shape[2])
-
-    #crop according to crop_indeces
-    def zerocrop_img(self, img, augment=False):
-        if augment:
-            randx = np.random.rand(3)*2-1
-            new_crop = self.crop_indeces+(self.padding*randx).astype(int)
-
-            cropped_img = img[new_crop[0][0]:new_crop[1][0],  
-                              new_crop[0][1]:new_crop[1][1],
-                              new_crop[0][2]:new_crop[1][2]]
-
-            flip_axis = np.random.rand(3)
-            if round(flip_axis[0]):
-                cropped_img = cropped_img[::-1,:,:]
-            if round(flip_axis[1]):
-                cropped_img = cropped_img[:,::-1,:]
-            if round(flip_axis[2]):
-                cropped_img = cropped_img[:,:,::-1]
-                
-        else:
-            cropped_img = img[self.crop_indeces[0][0]:self.crop_indeces[1][0],  
-                              self.crop_indeces[0][1]:self.crop_indeces[1][1],
-                              self.crop_indeces[0][2]:self.crop_indeces[1][2]]
-            
-        return cropped_img
-
-
-#crops the zero-margin of a 3D image (based on mask)
-def zerocrop_img(img, set_crop=False, padding=False):
-    global crop_indeces
-    
-    #set crop locations if there are none yet or if requested
-    if (crop_indeces is None) or (set_crop):
-        # argwhere will give you the coordinates of every non-zero point
-        true_data = np.argwhere(img)
-        # take the smallest points and use them as the top left of your crop
-        top_left = true_data.min(axis=0)
-        # take the largest points and use them as the bottom right of your crop
-        bottom_right = true_data.max(axis=0)
-        crop_indeces = [top_left, bottom_right+1]  # plus 1 because slice isn't inclusive
+        c2 = Conv3D(32, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(c1)
+        c2 = BatchNormalization()(c2)
+        c2 = Activation(RELU)(c2)
+        p2 = MaxPooling3D(pool_size=(2, 2, 2))(c2)
         
-        print('crop set to x[{}:{}], y[{}:{}], z[{}:{}]'.format(crop_indeces[0][0], crop_indeces[1][0], 
-                                                                crop_indeces[0][1], crop_indeces[1][1], 
-                                                                crop_indeces[0][2], crop_indeces[1][2]))
+        c3 = Conv3D(48, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(p2)
+        c3 = BatchNormalization()(c3)
+        c3 = Activation(RELU)(c3)
+        
+        c4 = Conv3D(48, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(c3)
+        c4 = BatchNormalization()(c4)
+        c4 = Activation(RELU)(c4)
+        p4 = MaxPooling3D(pool_size=(2, 2, 2))(c4)
+        
+        c5 = Conv3D(64, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(p4)
+        c5 = BatchNormalization()(c5)
+        c5 = Activation(RELU)(c5)
+        
+        c6 = Conv3D(64, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(c5)
+        c6 = BatchNormalization()(c6)
+        c6 = Activation(RELU)(c6)
+        p6 = MaxPooling3D(pool_size=(2, 2, 2))(c6)
 
-        if padding == True:
-            shape = crop_indeces[1]-crop_indeces[0]
-            bottom_unet = shape.astype(float)/2/2**3
-            top_unet = np.ceil(bottom_unet)*2*2**3
-            padding = (top_unet-shape)/2
-            print('applying [{},{},{}] padding to image..'.format(padding[0], padding[1], padding[2]))
-            padding_l = padding.astype(int)
-            padding_r = np.ceil(padding).astype(int)
-            crop_indeces[0] -= padding_l
-            crop_indeces[1] += padding_r
+        c7 = Conv3D(80, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(p6)
+        c7 = BatchNormalization()(c7)
+        c7 = Activation(RELU)(c7)
+        
+        c8 = Conv3D(80, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(c7)
+        c8 = BatchNormalization()(c8)
+        c8 = Activation(RELU)(c8)
 
-            print('crop set to x[{}:{}], y[{}:{}], z[{}:{}]'.format(crop_indeces[0][0], crop_indeces[1][0], 
-                                                                    crop_indeces[0][1], crop_indeces[1][1], 
-                                                                    crop_indeces[0][2], crop_indeces[1][2]))
+        x1 = GlobalAveragePooling3D()(c8)
+
+        #right input branch
+        input2 = Input((1,))
+
+        # merging braches into final model
+        y1 = concatenate([x1, input2]) # other modes: multiply, concatenate, dot
+        
+        y2 = Dense(32, activation=RELU)(y1)
+        y2 = Dropout(0.2)(y2)
+
+        final = Dense(1, activation='linear')(y2)
+
+        model = Model(inputs=[input1, input2], outputs=final)
+
+        adam_opt = keras.optimizers.Adam(
+            lr = self.get_parameter(LEARNING_RATE),
+            beta_1 = self.get_parameter(BETA1),
+            beta_2 = self.get_parameter(BETA2),
+            epsilon = self.get_parameter(EPSILON), 
+            decay = self.get_parameter(DECAY),
+        )
+        model.compile(
+            loss='mean_squared_error',
+            optimizer=adam_opt,
+            metrics=['mae', 'mse']
+        )
+        
+        return model
     
-    try:
-        cropped_img = img[crop_indeces[0][0]:crop_indeces[1][0],  
-                          crop_indeces[0][1]:crop_indeces[1][1],
-                          crop_indeces[0][2]:crop_indeces[1][2]]
-        return cropped_img
-    except ValueError:
-        print('ERROR: No crop_indeces defined for zerocrop. Returning full image...')
-        return img
+    def save_model(self):
+        """ Save the CNN model.
+        """
+        with open(f"{os.getenv(MODEL_FOLDER)}/{self.id}/model.json", 'w') as json_file:
+            json_file.write(self.model.to_json())
+        ModelCheckpoint(f"{os.getenv(MODEL_FOLDER)}/{self.id}/model.h5", monitor='val_loss', verbose=0, save_best_only=True, mode='auto')
 
-def retrieve_data(patient_index, img_size, img_scale=1.0, mask=None, augment=False, mode=[]):
-    """
-    Function to retrieve data from a single patient
-    
-    Inputs:
-    - patient_index = list of bigrfullnames identifying scans
-    - img_size = size of MRI images
-    - img_scale = scale of the MRI scans [default = 1]
-    - mask = mask image if necessary [default = None]
-    - augment = Boolean if data augmentation should be used [default = False]
-    - mode = train, validate or test (used to find appropriate data)
-    
-    Outputs:
-    - img_data = MRI data
-    - input2 = sex
-    - label = age
+    def load_model(self):
+        """ Load the CNN model from a previous session.
+        """
+        self.model = keras.models.load_model(f"{os.getenv(MODEL_FOLDER)}/{self.id}/model.h5")
+        self.model.summary()
 
-    """
-    # Retrieve patient info and label(=SNP) of the patient
-    if mode == 'train':
-        patient_info = train_label_set.loc[patient_index]
-    elif mode == 'validate':
-        patient_info = validation_label_set.loc[patient_index]
-    elif mode == 'test':
-        patient_info = test_label_set.loc[patient_index]
-    else: # validation set might not use validation flag
-        patient_info = validation_label_set.loc[patient_index]
-    
-    # Get patient label (incident dementia or not)
-    label = patient_info.get('age')
-    
-    # Get second input (sex)
-    input2 = patient_info.get('sex')    
-    
+    def train(self):
+        """ Train the CNN model.
+        """
+        model_version=f"BrainAge_{id}"
+        batch_size = self.get_parameter(BATCH_SIZE)
+        img_size = self.initialize()
+        # history = LossHistory(epochs, modelversion)
+        checkpoint = self.save_model(model_version, self.model)
+        stoptraining = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=0, mode='min')
 
-    # Get image
-    patient_filename = patient_index.strip()+'_GM_to_template_GM_mod.nii.gz'
-    img = nib.load(IMAGE_DIR+patient_filename)  
-    img_data = img.get_data()
-    
-    # Apply mask to imagedata (if requested)
-    if mask is not None:
-        img_data = img_data*mask
-        img_data = zerocrop_img(img_data)
+        patients_per_epoch = min(self.get_parameter(PATIENTS_PER_EPOCH), train_size)
+        steps_per_epoch = int(math.ceil(float(patients_per_epoch)/batch_size))
+        validation_steps = int(math.ceil(float(validation_size)/batch_size))
 
-    # Rescale imagedata (if requested)
-    if img_scale < 1.0:
-        img_data = resize_img(img_data, img_size)
-    
-    return np.array(img_data), np.array(int(input2)), label
+        self.model.fit_generator(
+            data_generator(
+                list(train_set),
+                img_size,
+                batch_size,
+                img_scale,
+                mask,
+                augment=augment_train,
+                mode='train'
+            ),
+            steps_per_epoch=steps_per_epoch,
+            epochs=epochs,
+            validation_data=data_generator(list(validation_set), img_size, batch_size, img_scale, mask),
+            validation_steps=validation_steps,
+            max_queue_size=1,
+            callbacks=[history, checkpoint, stoptraining])
 
-
-def generate_batch(patients, img_size, img_scale=1.0, mask=None, augment=False, mode=[]):
-    """
-    iterate through a batch of patients and get the corresponding data
-    
-    Input: 
-    - patients = list of bigrfullnames identifying scans
-    - img_size = size of MRI images
-    - img_scale = scale of the MRI scans [default = 1]
-    - mask = mask image if necessary [default = None]
-    - augment = Boolean if data augmentation should be used [default = False]
-    - mode
-    
-    Outputs:
-    - [input data] = sex
-    - [label data] = age
-
-    """    
-    #get data of each patient
-    img_data = []
-    label_data = []
-    sex = []
-    for patient in patients:
-        try:
-            x, x2, y = retrieve_data(patient, img_size, img_scale, mask, augment, mode)
-            img_data.append(x)
-            sex.append(x2)
-            label_data.append(y)
-        except KeyError as e:
-            print('\nERROR: No label found for file {}'.format(patient))
-        except IOError as e:            
-            print('\nERROR: Problem loading file {}. File probably corrupted.'.format(patient))
-            
-
-    #convert to correct input format for network
-    img_data = np.array(img_data)
-    img_data = np.reshape(img_data,(-1, 160, 192, 144, 1))
-
-    sex_data = np.array(sex)
-    
-    label_data = np.array([label_data])
-
-
-    return ([img_data, sex_data], [label_data])
-
-def data_generator(patient_list, img_size, batch_size, img_scale=1.0, mask=None, augment=False, mode=[], shuffle=True):
-    """
-    Provides the inputs and the label to the convolutional network during training
-    
-    Input:
-    - patient_list = list of bigrfullnames identifying scans
-    - img_size = size of MRI images
-    - batch_size = size of batch used in training
-    - img_scale = scale of the MRI scans [default = 1]
-    - mask = mask image if necessary [default = None]
-    - augment = Boolean if data augmentation should be used [default = False]
-    
-    Output:
-    - Data = continous data output for batches used in training the network
-
-    """
-    while 1:
-        if shuffle:
-            #shuffle list/order of patients
-            pl_shuffled = random.sample(patient_list, len(patient_list))
-            #divide list of patients into batches
-            batch_size = int(batch_size)
-            patient_sublist = [pl_shuffled[p:p+batch_size] for p in range(0, len(pl_shuffled), batch_size)]
-        else:
-            batch_size = int(batch_size)
-            patient_sublist = [patient_list[p:p+batch_size] for p in range(0, len(patient_list), batch_size)]
-        count = 0
-        data = []
-        for batch in range(0, len(patient_sublist)):         
-            #get the data of a batch samples/patients
-            data.append(generate_batch(patient_sublist[batch], img_size, img_scale, mask, augment, mode))
-            count = count + len(patient_sublist[batch])
-            #yield the data and pop for memory clearing
-            yield data.pop()
-
+        print('Succesfully trained the model.')
