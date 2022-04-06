@@ -2,6 +2,8 @@
 """
 import os
 
+import pandas as pd
+
 from federated_brain_age.constants import *
 
 def run_sql(db_client, sql_statement, parameters=None, fetch_all=False):
@@ -31,3 +33,13 @@ def get_parameter(parameter, parameters, default_parameters):
     """
     return parameters[parameter] if parameter in parameters \
         else default_parameters[parameter]
+
+def read_csv(path, header = 0, column_names = None, separator = ",", 
+    columns = None, filterKey = None, filter = None):
+    """ Read a csv file and return the pandas dataframe.
+        Optionally, it's possible to filter the data by a column.
+    """
+    data = pd.read_csv(path, header=header, names=column_names, sep=separator, usecols=columns)
+    if filter and filterKey:
+        data = data.loc[~data[filterKey].isin(filter)]
+    return data

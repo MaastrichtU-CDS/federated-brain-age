@@ -8,6 +8,9 @@ RUN apt-get update
 RUN apt-get install -y apt-utils gcc libpq-dev
 
 # install the federated algorithm
+# requirements filed used for development
+COPY ./requirements.txt /requirements.txt
+RUN pip install -r requirements.txt
 COPY . /app
 RUN pip install /app
 

@@ -5,15 +5,14 @@ import os
 from federated_brain_age.utils import get_parameter
 
 from tensorflow import keras
-from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
-from tensorflow.keras.layers import Dense, Activation, Flatten, Conv3D, MaxPooling3D, BatchNormalization, Dropout, GlobalAveragePooling3D
-from tensorflow.keras.layers import Input, concatenate, multiply, add, Reshape, Lambda
-from tensorflow.keras import regularizers
-from tensorflow.keras import backend as K
+from tensorflow.keras.layers import Dense, Activation, Conv3D, MaxPooling3D, BatchNormalization, Dropout, GlobalAveragePooling3D
+from tensorflow.keras.layers import Input, concatenate
 
 from federated_brain_age.constants import *
-from federated_brain_age.image_processing import zerocrop_img
+from federated_brain_age.data_loader import DataLoader
+from federated_brain_age.image_processing import zerocrop_img, imgZeropad
 
 DEFAULT_HYPERPARAMETERS = {
     INPUT_SHAPE: (160, 192, 144, 1),
@@ -34,42 +33,29 @@ DEFAULT_HYPERPARAMETERS = {
 DEFAULT_MASK_NAME = "Brain_GM_mask_1mm_MNI_kNN_conservative.nii.gz"
 
 class BrainAge:
-    def __init__(self, parameters, id):
+    def __init__(self, parameters, id, images_path, db_type, db_client, train_participants, val_participants):
         """ Initialize the CNN model.
         """
         self.parameters = parameters
         self.id = id
-        self.model = BrainAge.cnn_model()
-        self.model.summary()
         self.mask = None
-        
-        # Load the mask if available and necessary
-        mask_path = f"{os.getenv(MODEL_FOLDER)}/{self.id}/{os.getenv(MASK_FILENAME, DEFAULT_MASK_NAME)}"
-        if USE_MASK in self.parameters and self.parameters[USE_MASK] and os.path.exists(mask_path):
-            self.mask = nib.load().get_data(mask_path)
+        self.crop = None
+        self.images_path = images_path
+        self.train_loader = DataLoader(images_path, db_type, db_client, train_participants)
+        self.validation_loader = DataLoader(images_path, db_type, db_client, val_participants)
+        self.model = self.cnn_model(self.get_parameter)
+        # Load the mask if required and available
+        mask_path = f"{os.getenv(MODEL_FOLDER)}/{os.getenv(MASK_FILENAME, DEFAULT_MASK_NAME)}"
+        if USE_MASK in parameters and parameters[USE_MASK] and os.path.exists(mask_path):
+            self.mask = nib.load(mask_path).get_data()
 
-    def get_parameter(self, parameter):
-        """ Get parameter from the parameters provided, otherwise use the
-            default value.
-        """
-        return self.parameters[parameter] if parameter in self.parameters \
-            else DEFAULT_HYPERPARAMETERS[parameter]
-
-    def initialize(self):
-        """ Initialize and load the necessary information.
-        """
-        if self.mask:
-            # when applying a mask, initialize zerocropping
-            img_size = np.array(np.array(zerocrop_img(self.mask, True, padding=self.get_parameter(USE_PADDING))).shape)
-        else:
-            # TODO: Getting the first scan may require some changes in the data folder path
-            img_size = np.array(np.array(nib.load(os.getenv(DATA_FOLDER) + os.listdir(os.getenv(DATA_FOLDER))[0]).get_data()).shape)
-        return [int(math.ceil(img_d)) for img_d in img_size * self.get_parameter(IMG_SCALE)]
-
-    def cnn_model(self):
+    @staticmethod
+    def cnn_model(parameters):
         """ Define the CNN mode.
+
+            parameters: callback to retrieve the parameters.
         """
-        input1 = Input(self.get_parameter(INPUT_SHAPE))
+        input1 = Input(parameters(INPUT_SHAPE))
 
         c1 = Conv3D(32, kernel_size=(5,5,5), strides=(2,2,2), padding=PADDING_SAME)(input1)
         c1 = BatchNormalization()(c1)
@@ -122,11 +108,11 @@ class BrainAge:
         model = Model(inputs=[input1, input2], outputs=final)
 
         adam_opt = keras.optimizers.Adam(
-            lr = self.get_parameter(LEARNING_RATE),
-            beta_1 = self.get_parameter(BETA1),
-            beta_2 = self.get_parameter(BETA2),
-            epsilon = self.get_parameter(EPSILON), 
-            decay = self.get_parameter(DECAY),
+            lr = parameters(LEARNING_RATE),
+            beta_1 = parameters(BETA1),
+            beta_2 = parameters(BETA2),
+            epsilon = parameters(EPSILON), 
+            decay = parameters(DECAY),
         )
         model.compile(
             loss='mean_squared_error',
@@ -135,6 +121,25 @@ class BrainAge:
         )
         
         return model
+
+    def get_parameter(self, parameter):
+        """ Get parameter from the parameters provided, otherwise use the
+            default value.
+        """
+        return self.parameters[parameter] if parameter in self.parameters \
+            else DEFAULT_HYPERPARAMETERS[parameter]
+
+    def initialize(self):
+        """ Initialize and load the necessary information.
+        """
+        if self.mask is not None:
+            # when applying a mask, initialize zerocropping
+            # self.crop = imgZeropad(self.mask, padding=self.get_parameter(USE_PADDING))
+            img_size = np.array(np.array(zerocrop_img(self.mask, padding=self.get_parameter(USE_PADDING))).shape)
+        else:
+            # TODO: Getting the first scan may require some changes in the data folder path
+            img_size = np.array(np.array(nib.load(self.images_path + os.listdir(self.images_path)[0]).get_data()).shape)
+        return [int(math.ceil(img_d)) for img_d in img_size * self.get_parameter(IMG_SCALE)]
     
     def save_model(self):
         """ Save the CNN model.
@@ -155,29 +160,27 @@ class BrainAge:
         model_version=f"BrainAge_{id}"
         batch_size = self.get_parameter(BATCH_SIZE)
         img_size = self.initialize()
+        img_scale = self.get_parameter(IMG_SCALE)
         # history = LossHistory(epochs, modelversion)
-        checkpoint = self.save_model(model_version, self.model)
+        #checkpoint = self.save_model()
         stoptraining = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=0, mode='min')
 
-        patients_per_epoch = min(self.get_parameter(PATIENTS_PER_EPOCH), train_size)
+        patients_per_epoch = min(self.get_parameter(PATIENTS_PER_EPOCH), len(self.train_loader.participants))
         steps_per_epoch = int(math.ceil(float(patients_per_epoch)/batch_size))
-        validation_steps = int(math.ceil(float(validation_size)/batch_size))
+        validation_steps = int(math.ceil(float(len(self.validation_loader.participants))/batch_size))
 
         self.model.fit_generator(
-            data_generator(
-                list(train_set),
-                img_size,
-                batch_size,
-                img_scale,
-                mask,
-                augment=augment_train,
-                mode='train'
+            self.train_loader.data_generator(
+                img_size, batch_size, img_scale, mask=self.mask, augment=False, mode=[], shuffle=True
             ),
             steps_per_epoch=steps_per_epoch,
-            epochs=epochs,
-            validation_data=data_generator(list(validation_set), img_size, batch_size, img_scale, mask),
+            epochs=self.get_parameter(EPOCHS),
+            validation_data=self.validation_loader.data_generator(
+                img_size, batch_size, img_scale, mask=self.mask
+            ),
             validation_steps=validation_steps,
             max_queue_size=1,
-            callbacks=[history, checkpoint, stoptraining])
+            callbacks=[stoptraining])
+            #callbacks=[history, checkpoint, stoptraining])
 
         print('Succesfully trained the model.')

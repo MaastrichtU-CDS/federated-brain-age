@@ -1,0 +1,10 @@
+version: "3.8"
+
+services:
+  brain-age:
+    image: pmateus/memorabel-brain-age:0.0.1
+    environment:
+    volumes:
+
+  # db:
+  # Example using a database

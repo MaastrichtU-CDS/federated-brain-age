@@ -24,7 +24,11 @@ setup(
     packages=find_packages(),
     python_requires='>=3.6',
     install_requires=[
-        'psycopg2'
+        'psycopg2==2.9.3',
+        'tensorflow==2.8.0',
+        'nibabel==3.2.2',
+        'numpy',
+        'xnat'
     ]
     # ,
     # extras_require={
