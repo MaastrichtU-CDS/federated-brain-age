@@ -2,10 +2,9 @@ import pandas as pd
 import numpy as np
 import nibabel as nib
 import random
-from scipy import ndimage as nd
 
 from federated_brain_age.constants import *
-from federated_brain_age.image_processing import zerocrop_img
+from federated_brain_age.image_processing import zerocrop_img, resize_img
 from federated_brain_age.utils import read_csv
 
 class DataLoader:
@@ -22,17 +21,8 @@ class DataLoader:
 
         self.clinical_data = pd.DataFrame(data, columns = [ID, AGE, SEX])
         self.clinical_data = self.clinical_data.set_index(ID)
-        
-    @staticmethod
-    def resize_img(img, img_size):
-        # Resize the image to the new img_size
-        # Lower the image resolution
-        dsfactor = [w / float(f) for w, f in zip(img_size, img.shape)]
-        img = nd.interpolation.zoom(img, zoom=dsfactor)
-        return img
 
-
-    def retrieve_data(self, patient_index, img_size, img_scale=1.0, mask=None, augment=False, mode=[]):
+    def retrieve_data(self, patient_index, img_size, img_scale=1.0, mask=None, augment=False, mode=[], crop=None):
         """
         Function to retrieve data from a single patient
         
@@ -73,15 +63,18 @@ class DataLoader:
         # Apply mask to imagedata (if requested)
         if mask is not None:
             img_data = img_data * mask
-            img_data = zerocrop_img(img_data)
+            if crop is not None:
+                img_data = crop.zerocrop_img(img_data)
+            else:
+                img_data = zerocrop_img(img_data)
 
         # Rescale imagedata (if requested)
         if img_scale < 1.0:
-            img_data = self.resize_img(img_data, img_size)
+            img_data = resize_img(img_data, img_size)
         
         return np.array(img_data), np.array(int(input2)), label
 
-    def generate_batch(self, patients, img_size, img_scale=1.0, mask=None, augment=False, mode=[]):
+    def generate_batch(self, patients, img_size, img_scale=1.0, mask=None, augment=False, mode=[], crop=None):
         """
         iterate through a batch of patients and get the corresponding data
         
@@ -104,7 +97,7 @@ class DataLoader:
         sex = []
         for patient in patients:
             try:
-                x, x2, y = self.retrieve_data(patient, img_size, img_scale, mask, augment, mode)
+                x, x2, y = self.retrieve_data(patient, img_size, img_scale, mask, augment, mode, crop)
                 img_data.append(x)
                 sex.append(x2)
                 label_data.append(y)
@@ -125,7 +118,7 @@ class DataLoader:
 
         return ([img_data, sex_data], [label_data])
 
-    def data_generator(self, img_size, batch_size, img_scale=1.0, mask=None, augment=False, mode=[], shuffle=True):
+    def data_generator(self, img_size, batch_size, img_scale=1.0, mask=None, augment=False, mode=[], shuffle=True, crop=None):
         """
         Provides the inputs and the label to the convolutional network during training
         
@@ -155,7 +148,7 @@ class DataLoader:
             data = []
             for batch in range(0, len(patient_sublist)):         
                 #get the data of a batch samples/patients
-                data.append(self.generate_batch(patient_sublist[batch], img_size, img_scale, mask, augment, mode))
+                data.append(self.generate_batch(patient_sublist[batch], img_size, img_scale, mask, augment, mode, crop))
                 count = count + len(patient_sublist[batch])
                 #yield the data and pop for memory clearing
                 yield data.pop()

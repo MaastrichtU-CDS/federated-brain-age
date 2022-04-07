@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import ndimage as nd
 
 class imgZeropad:
 
@@ -39,7 +40,7 @@ class imgZeropad:
         self.padding = padding
         
         shape = crop_indeces[1]-crop_indeces[0]
-        self.img_size = (shape[0], shape[1], shape[2])
+        return (shape[0], shape[1], shape[2])
 
     #crop according to crop_indeces
     def zerocrop_img(self, img, augment=False):
@@ -106,3 +107,10 @@ def zerocrop_img(img, padding=False, crop_indeces=None):
     except ValueError:
         print('ERROR: No crop_indeces defined for zerocrop. Returning full image...')
         return img
+
+def resize_img(img, img_size):
+    # Resize the image to the new img_size
+    # Lower the image resolution
+    dsfactor = [w / float(f) for w, f in zip(img_size, img.shape)]
+    img = nd.interpolation.zoom(img, zoom=dsfactor)
+    return img

@@ -134,8 +134,9 @@ class BrainAge:
         """
         if self.mask is not None:
             # when applying a mask, initialize zerocropping
-            # self.crop = imgZeropad(self.mask, padding=self.get_parameter(USE_PADDING))
-            img_size = np.array(np.array(zerocrop_img(self.mask, padding=self.get_parameter(USE_PADDING))).shape)
+            self.crop = imgZeropad(self.mask, use_padding=self.get_parameter(USE_PADDING))
+            img_size = np.array(np.array(self.crop.zerocrop_img(self.mask)).shape)
+            # img_size = np.array(np.array(zerocrop_img(self.mask, padding=self.get_parameter(USE_PADDING))).shape)
         else:
             # TODO: Getting the first scan may require some changes in the data folder path
             img_size = np.array(np.array(nib.load(self.images_path + os.listdir(self.images_path)[0]).get_data()).shape)
@@ -171,12 +172,12 @@ class BrainAge:
 
         self.model.fit_generator(
             self.train_loader.data_generator(
-                img_size, batch_size, img_scale, mask=self.mask, augment=False, mode=[], shuffle=True
+                img_size, batch_size, img_scale, mask=self.mask, augment=False, mode=[], shuffle=True, crop=self.crop
             ),
             steps_per_epoch=steps_per_epoch,
             epochs=self.get_parameter(EPOCHS),
             validation_data=self.validation_loader.data_generator(
-                img_size, batch_size, img_scale, mask=self.mask
+                img_size, batch_size, img_scale, mask=self.mask, augment=False, mode=[], shuffle=False, crop=self.crop
             ),
             validation_steps=validation_steps,
             max_queue_size=1,
