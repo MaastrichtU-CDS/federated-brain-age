@@ -19,7 +19,7 @@ class imgZeropad:
                                                                 crop_indeces[0][1], crop_indeces[1][1], 
                                                                 crop_indeces[0][2], crop_indeces[1][2]))
 
-        if use_padding == True:
+        if use_padding:
             shape = crop_indeces[1]-crop_indeces[0]
             bottom_net = shape.astype(float)/2/2**3
             top_net = np.ceil(bottom_net)*2*2**3
@@ -83,7 +83,7 @@ def zerocrop_img(img, padding=False, crop_indeces=None):
                                                                 crop_indeces[0][1], crop_indeces[1][1], 
                                                                 crop_indeces[0][2], crop_indeces[1][2]))
 
-        if padding == True:
+        if padding:
             shape = crop_indeces[1]-crop_indeces[0]
             bottom_unet = shape.astype(float)/2/2**3
             top_unet = np.ceil(bottom_unet)*2*2**3

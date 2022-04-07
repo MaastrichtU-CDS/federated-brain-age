@@ -27,8 +27,9 @@ setup(
         'psycopg2==2.9.3',
         'tensorflow==2.8.0',
         'nibabel==3.2.2',
-        'numpy',
-        'xnat'
+        'numpy==1.21.5',
+        'scipy==1.7.3',
+        'xnat==0.4.1'
     ]
     # ,
     # extras_require={

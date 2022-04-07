@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import nibabel as nib
 import random
+from scipy import ndimage as nd
 
 from federated_brain_age.constants import *
 from federated_brain_age.image_processing import zerocrop_img
@@ -22,7 +23,16 @@ class DataLoader:
         self.clinical_data = pd.DataFrame(data, columns = [ID, AGE, SEX])
         self.clinical_data = self.clinical_data.set_index(ID)
         
-    def retrieve_data(self, patient_index, mask=None, augment=False, mode=[]):
+    @staticmethod
+    def resize_img(img, img_size):
+        # Resize the image to the new img_size
+        # Lower the image resolution
+        dsfactor = [w / float(f) for w, f in zip(img_size, img.shape)]
+        img = nd.interpolation.zoom(img, zoom=dsfactor)
+        return img
+
+
+    def retrieve_data(self, patient_index, img_size, img_scale=1.0, mask=None, augment=False, mode=[]):
         """
         Function to retrieve data from a single patient
         
@@ -50,10 +60,10 @@ class DataLoader:
         patient_info = self.clinical_data.loc[patient_index]
         # Get patient label (incident dementia or not)
         label = patient_info.get(AGE)
-        
+
         # Get second input (sex)
         input2 = patient_info.get(SEX)    
-        
+
         # Get image
         patient_filename = patient_index.strip() + '_GM_to_template_GM_mod.nii.gz'
         # TODO: Check if file exists
@@ -66,12 +76,12 @@ class DataLoader:
             img_data = zerocrop_img(img_data)
 
         # Rescale imagedata (if requested)
-        # if img_scale < 1.0:
-        #    img_data = resize_img(img_data, img_size)
+        if img_scale < 1.0:
+            img_data = self.resize_img(img_data, img_size)
         
         return np.array(img_data), np.array(int(input2)), label
 
-    def generate_batch(self, patients, mask=None, augment=False, mode=[]):
+    def generate_batch(self, patients, img_size, img_scale=1.0, mask=None, augment=False, mode=[]):
         """
         iterate through a batch of patients and get the corresponding data
         
@@ -88,13 +98,13 @@ class DataLoader:
         - [label data] = age
 
         """    
-        #get data of each patient
+        # Get data of each patient
         img_data = []
         label_data = []
         sex = []
         for patient in patients:
             try:
-                x, x2, y = self.retrieve_data(patient, mask, augment, mode)
+                x, x2, y = self.retrieve_data(patient, img_size, img_scale, mask, augment, mode)
                 img_data.append(x)
                 sex.append(x2)
                 label_data.append(y)
@@ -145,7 +155,7 @@ class DataLoader:
             data = []
             for batch in range(0, len(patient_sublist)):         
                 #get the data of a batch samples/patients
-                data.append(self.generate_batch(patient_sublist[batch], mask, augment, mode))
+                data.append(self.generate_batch(patient_sublist[batch], img_size, img_scale, mask, augment, mode))
                 count = count + len(patient_sublist[batch])
                 #yield the data and pop for memory clearing
                 yield data.pop()
