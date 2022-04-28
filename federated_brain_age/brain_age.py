@@ -108,7 +108,7 @@ class BrainAge:
         model = Model(inputs=[input1, input2], outputs=final)
 
         adam_opt = keras.optimizers.Adam(
-            lr = parameters(LEARNING_RATE),
+            learning_rate = parameters(LEARNING_RATE),
             beta_1 = parameters(BETA1),
             beta_2 = parameters(BETA2),
             epsilon = parameters(EPSILON), 
@@ -170,7 +170,7 @@ class BrainAge:
         steps_per_epoch = int(math.ceil(float(patients_per_epoch)/batch_size))
         validation_steps = int(math.ceil(float(len(self.validation_loader.participants))/batch_size))
 
-        self.model.fit_generator(
+        self.model.fit(
             self.train_loader.data_generator(
                 img_size, batch_size, img_scale, mask=self.mask, augment=False, mode=[], shuffle=True, crop=self.crop
             ),
