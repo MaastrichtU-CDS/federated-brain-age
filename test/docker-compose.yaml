@@ -2,9 +2,21 @@ version: "3.8"
 
 services:
   brain-age:
-    image: pmateus/memorabel-brain-age:0.0.1
+    image: brain-age:latest
     environment:
+      INPUT: /mnt/data
+      SAVE_PATH: /mnt/results
+      LOG_PATH: /mnt
+      DATA_FOLDER: /mnt
+      MODEL_FOLDER: /mnt
+      IMAGES_FOLDER: /mnt/data
     volumes:
+      - ./images:/mnt/data
+      - ./run_master.py:/mnt/run_master.py
+      - ./clinical_data.csv:/mnt/dataset.csv
+      - ./Brain_GM_mask_1mm_MNI_kNN_conservative.nii.gz:/mnt/Brain_GM_mask_1mm_MNI_kNN_conservative.nii.gz
+    entrypoint: /bin/bash
 
   # db:
   # Example using a database
+  

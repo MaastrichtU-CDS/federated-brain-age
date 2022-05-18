@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import nibabel as nib
 import random
+import os
 
 from federated_brain_age.constants import *
 from federated_brain_age.image_processing import zerocrop_img, resize_img
@@ -55,9 +56,11 @@ class DataLoader:
         input2 = patient_info.get(SEX)    
 
         # Get image
-        patient_filename = patient_index.strip() + '_GM_to_template_GM_mod.nii.gz'
+        patient_filename = patient_index.strip() + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
         # TODO: Check if file exists
-        img = nib.load(self.images_path + patient_filename)  
+        # Probably better to be done prior to this stage and get the "real"
+        # number of participants
+        img = nib.load(os.path.join(self.images_path, patient_filename))
         img_data = img.get_data()
 
         # Apply mask to imagedata (if requested)

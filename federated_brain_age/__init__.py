@@ -8,32 +8,38 @@ from federated_brain_age.constants import *
 from federated_brain_age.utils import *
 from federated_brain_age.xnat_client import retrieve_data
 
-def execute_task(client, input):
+def get_orgarnization(client):
     # obtain organizations that are within the collaboration
     info("Obtaining the organizations in the collaboration")
     organizations = client.get_organizations_in_my_collaboration()
-    ids = [organization.get("id") for organization in organizations]
+    # ids = [organization.get("id") for organization in organizations]
+    return organizations 
 
+def execute_task(client, input, org_ids):
     # collaboration and image are stored in the key, so we do not need
     # to specify these
     info("Creating node tasks")
     task = client.create_new_task(
         input,
-        organization_ids=ids
+        organization_ids=org_ids
     )
+    return task.get("id")
 
-    # wait for all results
-    task_id = task.get("id")
-    task = client.request(f"task/{task_id}")
-    while not task.get("complete"):
-        task = client.request(f"task/{task_id}")
-        info("Waiting for results")
-        # TODO: Time should be a higher value based on the expected time
-        # for each task
-        time.sleep(5)
-
-    info("Obtaining results")
-    return client.get_results(task_id=task.get("id"))
+def get_result(client, tasks_id, max_number_tries=DEFAULT_MAX_NUMBER_TRIES):
+    # Get the task's result
+    results = {}
+    tries = 0
+    while len(results.keys()) != len(task_id) or tries > max_number_tries:
+        # TODO: Set a better value for the timer
+        time.sleep(60)
+        for task_id in tasks_id:
+            if task_id not in results:
+                info("Waiting for results")
+                task = client.request(f"task/{task_id}")
+                if task.get("complete"):
+                    info("Obtaining results")
+                    results[task_id] = client.get_results(task_id=task.get("id"))
+    return results.values()
 
 def master(client, db_client, parameters = None):
     """
@@ -56,6 +62,11 @@ def master(client, db_client, parameters = None):
     # Validating the input
     info("Validating the input arguments")
     # TODO
+    # DB_CSV
+
+    # Get the organizations in the collaboration
+    orgs = get_orgarnization(client)
+    ids = [org.get("id") for org in orgs]
 
     # Check which task has been requested
     info(f"Task requested: {parameters[TASK]}")
@@ -76,19 +87,34 @@ def master(client, db_client, parameters = None):
         results = None
         # Execute the training
         for i in range(0, parameters[MODEL][MASTER][ROUNDS]):
-            info(f"Round {i}")
-            input = {
-                "method": "brain_age",
-                "args": [],
-                "kwargs": {
-                    "parameters": parameters[MODEL][NODE],
-                    "weights": brain_age_weights,
+            info(f"Round {i}/{parameters[MODEL][MASTER][ROUNDS]}")
+            tasks_id = []
+            for id in ids:
+                input = {
+                    "method": ALGORITHM,
+                    "args": [],
+                    "kwargs": {
+                        "parameters": {
+                            **parameters[MODEL][NODE],
+                            TRAINING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
+                            VALIDATION_IDS: parameters[MODEL][NODE][VALIDATION_IDS][id],
+                            # TESTING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
+                        },
+                        "weights": brain_age_weights,
+                    }
                 }
-            }
-            results = execute_task(client, input)
-            # FedAvg
+                tasks_id.append(execute_task(client, input, [id]))
+            results = get_result(
+                client, tasks_id, max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES
+            )
+            # TODO: Validate if there are errors in the results:
+            # Log the information and terminate the training
+
             info("Aggregating the results")
-            brain_age_weights = tf.reduce_mean([result[WEIGHTS] for result in results], 2)
+            brain_age_weights_update = []
+            for i in range(0, len(results[0][WEIGHTS])):
+                    brain_age_weights_update.append(tf.reduce_mean([result[WEIGHTS][i] for result in results], axis=0))
+            brain_age_weights = brain_age_weights_update
 
     elif parameters[TASK] == PREDICT:
         input_ = {
@@ -110,7 +136,7 @@ def master(client, db_client, parameters = None):
 
     return output
 
-def RPC_check():
+def RPC_check(db_client, parameters):
     """
     Check the status of the different components:
     - Cluster by successfully running this task;
@@ -128,9 +154,14 @@ def RPC_check():
     """
     info("Check components - Node method")
     output = {}
+    # Check the number of scans actually available
+
+    # Check if task ID already exists
+
     # Check the connection to the XNAT
-    if os.getenv(XNAT_URL):
-        pass
+    # if os.getenv(XNAT_URL):
+    #     pass
+
     # Check the GPU availability
     output[GPU_COUNT] = len(tf.config.list_physical_devices('GPU'))
     return output
@@ -154,7 +185,7 @@ def RPC_brain_age(db_client, parameters, weights):
     info("Brain age CNN - Node method")
     output = {}
     # Retrieve the data from XNAT if necessary
-    data_path = os.path.join(os.getenv(DATA_FOLDER), parameters[TASK_ID])
+    # data_path = os.path.join(os.getenv(DATA_FOLDER), parameters[TASK_ID])
     # if ...:
     #     # Check if the folder exists and if the data is already there
     #     # folder_exists(data_path)
@@ -168,9 +199,9 @@ def RPC_brain_age(db_client, parameters, weights):
     brain_age = BrainAge(
         parameters,
         parameters[TASK_ID],
-        data_path,
+        os.getenv(IMAGES_FOLDER),
         parameters[DB_TYPE],
-        db_client if parameters[DB_TYPE] != DB_CSV else data_path + "/dataset.csv",
+        db_client if parameters[DB_TYPE] != DB_CSV else os.getenv(DATA_FOLDER) + "/dataset.csv",
         parameters[TRAINING_IDS],
         parameters[VALIDATION_IDS],
     )
