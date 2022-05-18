@@ -19,6 +19,10 @@ To accomplish this, the data is expected to follow a similar structure:
 * Imaging data: Stored in XNAT and retrieved only once before starting the training at each center.
 * Clinical data: Stored in a relational database harmonised according to a Common Data Model (CDM).
 
+## Build Image
+
+To build the docker image, run the following command: `docker image build -t brain-age:latest .`
+
 ## Running
 
 Vantage6 is used to implement the PHT infrastructure, implying dependencies on this library (e.g., communication between nodes and server) in the algorithm implementation. However, as demonstrated by the examples, it's simple to decouple the algorithm core and adapt to a different infrastructure.

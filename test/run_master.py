@@ -20,10 +20,12 @@ PARAMETERS = {
             USE_MASK: True,
             EPOCHS: 1,
             TRAINING_IDS: {
-                1: ["2a", "3a"]
+                1: ["2a", "3a"],
+                2: ["2a", "3a"]
             },
             VALIDATION_IDS: {
-                1: ["4a"]
+                1: ["4a"],
+                2: ["4a"]
             },
             #"TESTING_IDS": [[]]
         }
@@ -34,14 +36,17 @@ lib = importlib.import_module("federated_brain_age")
 
 def mock_execute_task(client, parameters, org_ids):
     print(f"Mock: execute task for the organizations {org_ids}")
-    return 1
+    return org_ids[0]
 
 def mock_get_orgarnization(client):
     print("Mock: get organizations")
     return [
         {
-            'id': 1  
-        }
+            'id': 1,
+        },
+        # {
+        #     'id': 2,
+        # }
     ]
 
 def mock_get_result(client, task_id, max_number_tries):
