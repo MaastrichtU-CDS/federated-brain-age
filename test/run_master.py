@@ -21,11 +21,11 @@ PARAMETERS = {
             EPOCHS: 1,
             TRAINING_IDS: {
                 1: ["2a", "3a"],
-                2: ["2a", "3a"]
+                # 2: ["2a", "3a"]
             },
             VALIDATION_IDS: {
                 1: ["4a"],
-                2: ["4a"]
+                # 2: ["4a"]
             },
             #"TESTING_IDS": [[]]
         }

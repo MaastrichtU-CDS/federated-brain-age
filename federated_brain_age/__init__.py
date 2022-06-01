@@ -1,4 +1,5 @@
 import time
+import os
 
 import tensorflow as tf
 from vantage6.tools.util import warn, info
@@ -7,6 +8,8 @@ from federated_brain_age.brain_age import BrainAge, get_parameter, DEFAULT_HYPER
 from federated_brain_age.constants import *
 from federated_brain_age.utils import *
 from federated_brain_age.xnat_client import retrieve_data
+from federated_brain_age.postgres_manager import PostgresManager
+from federated_brain_age.db_builder import get_task_by_id
 
 def get_orgarnization(client):
     # obtain organizations that are within the collaboration
@@ -155,8 +158,36 @@ def RPC_check(db_client, parameters):
     info("Check components - Node method")
     output = {}
     # Check the number of scans actually available
+    output[IMAGES_FOLDER] = {}
+    images_path = os.getenv(IMAGES_FOLDER)
+    if os.getenv(images_path) and os.path.isdir(images_path):
+        scans = [f for f in os.path.listdir(images_path) if os.path.isfile(os.path.join(images_path, f))]
+        output[IMAGES_FOLDER][NUMBER_SCANS] = len(scans)
+        missing = []
+        if TRAINING_IDS in parameters or VALIDATION_IDS in parameters:
+            for id in (parameters.get(TRAINING_IDS) or []) + (parameters.get(VALIDATION_IDS) or []):
+                if id not in scans:
+                    missing.append[id]
+            
+    else:
+        output[IMAGES_FOLDER][MESSAGE] = "Image folder not found"
+
+    # Check if the clinical data is available
+    db_cnn_client = None
+    if parameters[DB_TYPE] == DB_CSV:
+        output[DB_CSV] = os.path.isfile(os.getenv(DATA_FOLDER) + "/dataset.csv")
+    elif parameters[DB_TYPE] == DB_POSTGRES:
+        output[DB_POSTGRES] = False
+        if os.getenv(DB_CNN_DATABASE):
+            db_cnn_client = PostgresManager(default_db=False, db_env_var=DB_CNN_DATABASE)
+        else:
+            warn("CNN database not provided")            
+        output[DB_POSTGRES] = db_cnn_client.isConnected
 
     # Check if task ID already exists
+    if TASK_ID in parameters and db_cnn_client:
+        result = get_task_by_id(parameters[TASK_ID])
+        output[TASK_ID] = result is not None
 
     # Check the connection to the XNAT
     # if os.getenv(XNAT_URL):

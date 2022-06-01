@@ -107,3 +107,5 @@ venv.bak/
 
 # project
 /test/data/
+
+.DS_Store

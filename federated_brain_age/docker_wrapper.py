@@ -89,15 +89,16 @@ def docker_wrapper(module: str):
             db_client = connection.cursor()
             info("Successfully connected to the database")       
         except Exception as error:
+            info("Database unavailable")
             info(str(error))
-            write_output(
-                output_format,
-                {
-                    ERROR: f"DB connection error: {str(error)}",
-                },
-                output_file
-            )
-            return None
+            # write_output(
+            #     output_format,
+            #     {
+            #         ERROR: f"DB connection error: {str(error)}",
+            #     },
+            #     output_file
+            # )
+            # return None
 
     # make the actual call to the method/function
     info("Dispatching ...")
