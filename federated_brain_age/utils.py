@@ -43,3 +43,9 @@ def read_csv(path, header = 0, column_names = None, separator = ",",
     if filter and filterKey:
         data = data.loc[~data[filterKey].isin(filter)]
     return data
+
+def check_errors(results):
+    output = None
+    if any([ERROR in result for result in results]):
+        output = [result[ERROR] for result in results if ERROR in result]
+    return output

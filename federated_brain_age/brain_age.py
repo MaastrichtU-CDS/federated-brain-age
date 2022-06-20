@@ -158,7 +158,7 @@ class BrainAge:
     def train(self):
         """ Train the CNN model.
         """
-        model_version=f"BrainAge_{id}"
+        model_version=f"BrainAge_{self.id}"
         batch_size = self.get_parameter(BATCH_SIZE)
         img_size = self.initialize()
         img_scale = self.get_parameter(IMG_SCALE)
@@ -170,7 +170,7 @@ class BrainAge:
         steps_per_epoch = int(math.ceil(float(patients_per_epoch)/batch_size))
         validation_steps = int(math.ceil(float(len(self.validation_loader.participants))/batch_size))
 
-        self.model.fit(
+        return self.model.fit(
             self.train_loader.data_generator(
                 img_size, batch_size, img_scale, mask=self.mask, augment=False, mode=[], shuffle=True, crop=self.crop
             ),
@@ -183,5 +183,3 @@ class BrainAge:
             max_queue_size=1,
             callbacks=[stoptraining])
             #callbacks=[history, checkpoint, stoptraining])
-
-        print('Succesfully trained the model.')

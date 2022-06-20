@@ -74,15 +74,28 @@ def master(client, db_client, parameters = None):
     # Check which task has been requested
     info(f"Task requested: {parameters[TASK]}")
     if parameters[TASK] == CHECK:
-        input_ = {
-            "method": "check",
-            "args": [],
-            "kwargs": {
-                "parameters": parameters,
+        tasks_id = []
+        for id in ids:
+            input = {
+                "method": CHECK,
+                "args": [],
+                "kwargs": {
+                    "parameters": {
+                        **parameters,
+                        TRAINING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
+                        VALIDATION_IDS: parameters[MODEL][NODE][VALIDATION_IDS][id],
+                        # TESTING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
+                    },
+                },
             }
-        }
+            tasks_id.append(execute_task(client, input, [id]))
+        results = get_result(
+            client, tasks_id, max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES
+        )
+        return results
     elif parameters[TASK] == TRAIN:
         # Intialize the model
+        learning_rate = parameters.get(LEARNING_RATE, 1)
         model_parameters = dict(DEFAULT_HYPERPARAMETERS)
         #model_parameters[INPUT_SHAPE] = parameters[INPUT_SHAPE]
         brain_age_model = BrainAge.cnn_model(model_parameters.get)
@@ -112,12 +125,20 @@ def master(client, db_client, parameters = None):
             )
             # TODO: Validate if there are errors in the results:
             # Log the information and terminate the training
+            info("Check if any exception occurred")
+            errors = check_errors(results)
+            if errors:
+                warn("Encountered an error, please review the parameters")
+                return errors
 
             info("Aggregating the results")
+            total_samples = sum([result[SAMPLES] for result in results])
             brain_age_weights_update = []
             for i in range(0, len(results[0][WEIGHTS])):
-                    brain_age_weights_update.append(tf.reduce_mean([result[WEIGHTS][i] for result in results], axis=0))
-            brain_age_weights = brain_age_weights_update
+                    brain_age_weights_update.append(
+                        tf.math.reduce_sum([result[WEIGHTS][i] * result[SAMPLES] / total_samples for result in results], axis=0)
+                    )
+            brain_age_weights = brain_age_weights * (1 - learning_rate) + brain_age_weights_update * learning_rate
 
     elif parameters[TASK] == PREDICT:
         input_ = {
@@ -227,17 +248,29 @@ def RPC_brain_age(db_client, parameters, weights):
     #         return {
     #             ERROR: ""
     #         }
-    brain_age = BrainAge(
-        parameters,
-        parameters[TASK_ID],
-        os.getenv(IMAGES_FOLDER),
-        parameters[DB_TYPE],
-        db_client if parameters[DB_TYPE] != DB_CSV else os.getenv(DATA_FOLDER) + "/dataset.csv",
-        parameters[TRAINING_IDS],
-        parameters[VALIDATION_IDS],
-    )
-    if weights:
-        brain_age.model.set_weights(weights)
-    brain_age.train()
-    output[WEIGHTS] = brain_age.model.get_weights()
+    try:
+        # Initialize the model
+        brain_age = BrainAge(
+            parameters,
+            parameters[TASK_ID],
+            os.getenv(IMAGES_FOLDER),
+            parameters[DB_TYPE],
+            db_client if parameters[DB_TYPE] != DB_CSV else os.getenv(DATA_FOLDER) + "/dataset.csv",
+            parameters[TRAINING_IDS],
+            parameters[VALIDATION_IDS],
+        )
+        if weights:
+            # Set the initial weights if available
+            brain_age.model.set_weights(weights)
+        # Train the model
+        result = brain_age.train()
+        # Retrieve the weights, metrics for the first and last epoch, and the 
+        # history if requested
+        output[WEIGHTS] = brain_age.model.get_weights()
+        for metric in result.history.keys():
+            output[metric] = [result.history[metric][0], result.history[metric][-1]]
+        if parameters.get(HISTORY):
+            output[HISTORY] = result.history
+    except Exception as error:
+        output[ERROR] = f"Error while training the model: {str(error)}"
     return output

@@ -1,4 +1,4 @@
-from constants import *
+from federated_brain_age.constants import *
 
 def get_task_by_id(task_id, pg):
     """ Retrieve the person id from the source id.
