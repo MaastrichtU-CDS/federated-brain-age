@@ -49,20 +49,23 @@ def mock_get_orgarnization(client):
         # }
     ]
 
-def mock_get_result(client, task_id, max_number_tries):
-    print(f"Mock: get result for task {task_id} within {max_number_tries} tries")
+def mock_get_result(client, tasks, max_number_tries):
+    print(f"Mock: get result for tasks {tasks.keys()} within {max_number_tries} tries")
     brain_age_method = getattr(lib, "RPC_brain_age")
-    return [brain_age_method(
-        None,
-        {
-            **PARAMETERS[MODEL][NODE],
-            TRAINING_IDS: PARAMETERS[MODEL][NODE][TRAINING_IDS][1],
-            VALIDATION_IDS: PARAMETERS[MODEL][NODE][VALIDATION_IDS][1],
-            TASK_ID: PARAMETERS[TASK_ID],
-            DB_TYPE: PARAMETERS[DB_TYPE]
-        },
-        None
-    )]
+    output = {}
+    for task_id in tasks.keys():
+        output[task_id] = brain_age_method(
+            None,
+            {
+                **PARAMETERS[MODEL][NODE],
+                TRAINING_IDS: PARAMETERS[MODEL][NODE][TRAINING_IDS][task_id],
+                VALIDATION_IDS: PARAMETERS[MODEL][NODE][VALIDATION_IDS][task_id],
+                TASK_ID: PARAMETERS[TASK_ID],
+                DB_TYPE: PARAMETERS[DB_TYPE]
+            },
+            None
+        )
+    return output
 
 @patch("federated_brain_age.execute_task", wraps=mock_execute_task)
 @patch("federated_brain_age.get_orgarnization", wraps=mock_get_orgarnization)
@@ -72,6 +75,10 @@ def test_master_train(mock_bar, mock_bar2, mock_bar3):
     # with patch("federated_brain_age.execute_task", wraps=mock_f) as mock_bar:
     master_method = getattr(lib, "master")
     result = master_method(None, None, PARAMETERS)
+    for key in result.keys():
+        if key != WEIGHTS:
+            print(key)
+            print(result[key])
 
 if __name__ == '__main__':
     test_master_train()

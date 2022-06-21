@@ -28,21 +28,21 @@ def execute_task(client, input, org_ids):
     )
     return task.get("id")
 
-def get_result(client, tasks_id, max_number_tries=DEFAULT_MAX_NUMBER_TRIES):
+def get_result(client, tasks, max_number_tries=DEFAULT_MAX_NUMBER_TRIES):
     # Get the task's result
     results = {}
     tries = 0
-    while len(results.keys()) != len(task_id) or tries > max_number_tries:
+    while len(results.keys()) != len(tasks) or tries > max_number_tries:
         # TODO: Set a better value for the timer
         time.sleep(60)
-        for task_id in tasks_id:
+        for task_id in tasks.keys():
             if task_id not in results:
                 info("Waiting for results")
                 task = client.request(f"task/{task_id}")
                 if task.get("complete"):
                     info("Obtaining results")
                     results[task_id] = client.get_results(task_id=task.get("id"))
-    return results.values()
+    return results
 
 def master(client, db_client, parameters = None):
     """
@@ -74,7 +74,7 @@ def master(client, db_client, parameters = None):
     # Check which task has been requested
     info(f"Task requested: {parameters[TASK]}")
     if parameters[TASK] == CHECK:
-        tasks_id = []
+        tasks = {}
         for id in ids:
             input = {
                 "method": CHECK,
@@ -88,11 +88,17 @@ def master(client, db_client, parameters = None):
                     },
                 },
             }
-            tasks_id.append(execute_task(client, input, [id]))
-        results = get_result(
-            client, tasks_id, max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES
+            task_id = execute_task(client, input, [id])
+            tasks[task_id] = {
+                ORGANIZATION_ID: id
+            }
+        output = get_result(
+            client, tasks, max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES
         )
-        return results
+        return [{
+            ORGANIZATION_ID: tasks[key],
+            RESULT: result,
+        } for key, result in output.items()]
     elif parameters[TASK] == TRAIN:
         # Intialize the model
         learning_rate = parameters.get(LEARNING_RATE, 1)
@@ -100,11 +106,13 @@ def master(client, db_client, parameters = None):
         #model_parameters[INPUT_SHAPE] = parameters[INPUT_SHAPE]
         brain_age_model = BrainAge.cnn_model(model_parameters.get)
         brain_age_weights = brain_age_model.get_weights()
-        results = None
+        results = {
+            METRICS: {}
+        }
         # Execute the training
         for i in range(0, parameters[MODEL][MASTER][ROUNDS]):
             info(f"Round {i}/{parameters[MODEL][MASTER][ROUNDS]}")
-            tasks_id = []
+            tasks = {}
             for id in ids:
                 input = {
                     "method": ALGORITHM,
@@ -119,27 +127,44 @@ def master(client, db_client, parameters = None):
                         "weights": brain_age_weights,
                     }
                 }
-                tasks_id.append(execute_task(client, input, [id]))
-            results = get_result(
-                client, tasks_id, max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES
+                task_id = execute_task(client, input, [id])
+                tasks[task_id] = {
+                    ORGANIZATION_ID: id
+                }
+            output = get_result(
+                client, tasks, max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES
             )
             # TODO: Validate if there are errors in the results:
             # Log the information and terminate the training
             info("Check if any exception occurred")
-            errors = check_errors(results)
+            output_data = list(output.values())
+            errors = check_errors(output_data)
             if errors:
                 warn("Encountered an error, please review the parameters")
                 return errors
 
             info("Aggregating the results")
-            total_samples = sum([result[SAMPLES] for result in results])
+            metrics = {}
+            # Collect the metrics by organization
+            for task_id, result in output.items():
+                metrics[task_id] = {
+                    ORGANIZATION_ID: tasks[task_id][ORGANIZATION_ID],
+                    HISTORY: result[HISTORY],
+                    METRICS: result[METRICS],
+                }
+            results[METRICS][i] = metrics
+            # Update the model weights
+            total_samples = sum([result[SAMPLES] for result in output_data])
             brain_age_weights_update = []
-            for i in range(0, len(results[0][WEIGHTS])):
+            for i in range(0, len(output_data[0][WEIGHTS])):
                     brain_age_weights_update.append(
-                        tf.math.reduce_sum([result[WEIGHTS][i] * result[SAMPLES] / total_samples for result in results], axis=0)
+                        tf.math.reduce_sum([
+                            result[WEIGHTS][i] * result[SAMPLES] / total_samples for result in output_data
+                        ], axis=0)
                     )
             brain_age_weights = brain_age_weights * (1 - learning_rate) + brain_age_weights_update * learning_rate
-
+        results[WEIGHTS] = brain_age_weights
+        return results
     elif parameters[TASK] == PREDICT:
         input_ = {
             "method": "predict",
@@ -235,7 +260,10 @@ def RPC_brain_age(db_client, parameters, weights):
         A Dict containing the CNN weights.
     """
     info("Brain age CNN - Node method")
-    output = {}
+    output = {
+        METRICS: {},
+        HISTORY: {},
+    }
     # Retrieve the data from XNAT if necessary
     # data_path = os.path.join(os.getenv(DATA_FOLDER), parameters[TASK_ID])
     # if ...:
@@ -262,13 +290,14 @@ def RPC_brain_age(db_client, parameters, weights):
         if weights:
             # Set the initial weights if available
             brain_age.model.set_weights(weights)
+        output[SAMPLES] = 1
         # Train the model
         result = brain_age.train()
         # Retrieve the weights, metrics for the first and last epoch, and the 
         # history if requested
         output[WEIGHTS] = brain_age.model.get_weights()
         for metric in result.history.keys():
-            output[metric] = [result.history[metric][0], result.history[metric][-1]]
+            output[METRICS][metric] = [result.history[metric][0], result.history[metric][-1]]
         if parameters.get(HISTORY):
             output[HISTORY] = result.history
     except Exception as error:
