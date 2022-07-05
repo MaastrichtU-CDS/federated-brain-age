@@ -4,7 +4,7 @@ import os
 import tensorflow as tf
 from vantage6.tools.util import warn, info
 
-from federated_brain_age.brain_age import BrainAge, get_parameter, DEFAULT_HYPERPARAMETERS
+from federated_brain_age.brain_age import BrainAge, DEFAULT_HYPERPARAMETERS
 from federated_brain_age.constants import *
 from federated_brain_age.utils import *
 from federated_brain_age.xnat_client import retrieve_data
@@ -123,6 +123,7 @@ def master(client, db_client, parameters = None):
                             TRAINING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
                             VALIDATION_IDS: parameters[MODEL][NODE][VALIDATION_IDS][id],
                             # TESTING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
+                            ROUNDS: i,
                         },
                         "weights": brain_age_weights,
                     }

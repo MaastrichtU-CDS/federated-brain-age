@@ -10,6 +10,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 from tensorflow.keras.layers import Dense, Activation, Conv3D, MaxPooling3D, BatchNormalization, Dropout, GlobalAveragePooling3D
 from tensorflow.keras.layers import Input, concatenate
 
+from federated_brain_age.callbacks import DecayingLRSchedule
 from federated_brain_age.constants import *
 from federated_brain_age.data_loader import DataLoader
 from federated_brain_age.image_processing import zerocrop_img, imgZeropad
@@ -26,8 +27,12 @@ DEFAULT_HYPERPARAMETERS = {
     AUGMENT_TRAIN: True,
     IMG_SCALE: 1.0,
     BATCH_SIZE: 1,
-    PATIENTS_PER_EPOCH: 4, # steps_per_epoch = patients_per_epoch/batch_size
+    PATIENTS_PER_EPOCH: 4, # steps_per_epoch = patients_per_epoch / batch_size
     EPOCHS: 4,
+    DROPOUT: 0.2,
+    STARTING_STEP: 0,
+    DECAY_STEPS: 1,
+    ROUNDS: 0,
 }
 
 DEFAULT_MASK_NAME = "Brain_GM_mask_1mm_MNI_kNN_conservative.nii.gz"
@@ -101,18 +106,27 @@ class BrainAge:
         y1 = concatenate([x1, input2]) # other modes: multiply, concatenate, dot
         
         y2 = Dense(32, activation=RELU)(y1)
-        y2 = Dropout(0.2)(y2)
+        y2 = Dropout(parameters(DROPOUT))(y2)
 
         final = Dense(1, activation='linear')(y2)
 
         model = Model(inputs=[input1, input2], outputs=final)
 
+        # Adam optimizer with an extended learning rate sceduler
+        # to allow restarting the training from a previous point
+        # in the same conditions.
+        steps_per_epoch = parameters(PATIENTS_PER_EPOCH) / parameters(BATCH_SIZE)
         adam_opt = keras.optimizers.Adam(
-            learning_rate = parameters(LEARNING_RATE),
+            learning_rate = DecayingLRSchedule(
+                parameters(LEARNING_RATE),
+                parameters(DECAY),
+                parameters(STARTING_STEP) or steps_per_epoch * parameters(EPOCHS) * parameters(ROUNDS),
+                parameters(DECAY_STEPS),
+            ),
             beta_1 = parameters(BETA1),
             beta_2 = parameters(BETA2),
             epsilon = parameters(EPSILON), 
-            decay = parameters(DECAY),
+            #decay = parameters(DECAY),
         )
         model.compile(
             loss='mean_squared_error',
