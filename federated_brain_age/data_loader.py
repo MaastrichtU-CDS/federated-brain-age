@@ -117,7 +117,7 @@ class DataLoader:
 
         sex_data = np.array(sex)
         
-        label_data = np.array([label_data])
+        label_data = np.array(label_data)
 
         return ([img_data, sex_data], [label_data])
 
