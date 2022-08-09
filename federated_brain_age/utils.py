@@ -49,3 +49,12 @@ def check_errors(results):
     if any([ERROR in result for result in results]):
         output = [result[ERROR] for result in results if ERROR in result]
     return output
+
+def validate_parameters(input, parameters):
+    missing_parameters = []
+    for parameter in parameters.keys():
+        if parameter not in input:
+            missing_parameters.append(parameter)
+        elif len(parameters[parameter].keys() > 0):
+            missing_parameters.extend(input[parameter], parameters[parameter])
+    return missing_parameters

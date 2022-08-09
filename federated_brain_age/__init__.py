@@ -28,13 +28,14 @@ def execute_task(client, input, org_ids):
     )
     return task.get("id")
 
-def get_result(client, tasks, max_number_tries=DEFAULT_MAX_NUMBER_TRIES):
+def get_result(client, tasks, max_number_tries=DEFAULT_MAX_NUMBER_TRIES, sleep_time=60):
     # Get the task's result
     results = {}
     tries = 0
     while len(results.keys()) != len(tasks) or tries > max_number_tries:
         # TODO: Set a better value for the timer
-        time.sleep(60)
+        time.sleep(sleep_time)
+        tries += 1
         for task_id in tasks.keys():
             if task_id not in results:
                 info("Waiting for results")
@@ -42,6 +43,12 @@ def get_result(client, tasks, max_number_tries=DEFAULT_MAX_NUMBER_TRIES):
                 if task.get("complete"):
                     info("Obtaining results")
                     results[task_id] = client.get_results(task_id=task.get("id"))
+    # Check the tasks that didn't complete in time
+    for task_id in tasks.keys():
+        if task_id not in results:
+            results[task_id] = {
+                ERROR: "Task did not complete in time"
+            }
     return results
 
 def master(client, db_client, parameters = None):
@@ -64,8 +71,10 @@ def master(client, db_client, parameters = None):
     """
     # Validating the input
     info("Validating the input arguments")
-    # TODO
-    # DB_CSV
+    if TASK not in parameters:
+        return {
+            ERROR: f"Missing the following parameter: {TASK}"
+        }
 
     # Get the organizations in the collaboration
     orgs = get_orgarnization(client)
@@ -74,6 +83,13 @@ def master(client, db_client, parameters = None):
     # Check which task has been requested
     info(f"Task requested: {parameters[TASK]}")
     if parameters[TASK] == CHECK:
+        # Validate the input
+        missing_parameters = validate_parameters(parameters, {DB_TYPE: {}})
+        if missing_parameters:
+            parse_error(
+                f"Missing the following parameters: {', '.join(missing_parameters)}"
+            )
+        # Send the tasks
         tasks = {}
         for id in ids:
             input = {
@@ -82,8 +98,8 @@ def master(client, db_client, parameters = None):
                 "kwargs": {
                     "parameters": {
                         **parameters,
-                        TRAINING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
-                        VALIDATION_IDS: parameters[MODEL][NODE][VALIDATION_IDS][id],
+                        # TRAINING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
+                        # VALIDATION_IDS: parameters[MODEL][NODE][VALIDATION_IDS][id],
                         # TESTING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
                     },
                 },
@@ -93,13 +109,33 @@ def master(client, db_client, parameters = None):
                 ORGANIZATION_ID: id
             }
         output = get_result(
-            client, tasks, max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES
+            client,
+            tasks,
+            max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES,
+            sleep_time=parameters.get(SLEEP_TIME) or DEFAULT_SLEEP_TIME,
         )
         return [{
             ORGANIZATION_ID: tasks[key],
             RESULT: result,
         } for key, result in output.items()]
     elif parameters[TASK] == TRAIN:
+        # Validate the input
+        missing_parameters = validate_parameters(parameters, {
+            MODEL: {
+                MASTER: {
+                    ROUNDS: {}
+                },
+                NODE: {
+                    EPOCHS: {},
+                    USE_MASK: {}
+                },
+            },
+            DB_TYPE: {},
+        })
+        if missing_parameters:
+            parse_error(
+                f"Missing the following parameters: {', '.join(missing_parameters)}"
+            )
         # Intialize the model
         learning_rate = parameters.get(LEARNING_RATE, 1)
         model_parameters = dict(DEFAULT_HYPERPARAMETERS)
@@ -120,8 +156,8 @@ def master(client, db_client, parameters = None):
                     "kwargs": {
                         "parameters": {
                             **parameters[MODEL][NODE],
-                            TRAINING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
-                            VALIDATION_IDS: parameters[MODEL][NODE][VALIDATION_IDS][id],
+                            # TRAINING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
+                            # VALIDATION_IDS: parameters[MODEL][NODE][VALIDATION_IDS][id],
                             # TESTING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
                             ROUNDS: i,
                         },
@@ -210,11 +246,11 @@ def RPC_check(db_client, parameters):
     if os.getenv(images_path) and os.path.isdir(images_path):
         scans = [f for f in os.path.listdir(images_path) if os.path.isfile(os.path.join(images_path, f))]
         output[IMAGES_FOLDER][NUMBER_SCANS] = len(scans)
-        missing = []
-        if TRAINING_IDS in parameters or VALIDATION_IDS in parameters:
-            for id in (parameters.get(TRAINING_IDS) or []) + (parameters.get(VALIDATION_IDS) or []):
-                if id not in scans:
-                    missing.append[id]
+        # missing = []
+        # if TRAINING_IDS in parameters or VALIDATION_IDS in parameters:
+        #     for id in (parameters.get(TRAINING_IDS) or []) + (parameters.get(VALIDATION_IDS) or []):
+        #         if id not in scans:
+        #             missing.append[id]
             
     else:
         output[IMAGES_FOLDER][MESSAGE] = "Image folder not found"
@@ -285,8 +321,8 @@ def RPC_brain_age(db_client, parameters, weights):
             os.getenv(IMAGES_FOLDER),
             parameters[DB_TYPE],
             db_client if parameters[DB_TYPE] != DB_CSV else os.getenv(DATA_FOLDER) + "/dataset.csv",
-            parameters[TRAINING_IDS],
-            parameters[VALIDATION_IDS],
+            # parameters[TRAINING_IDS],
+            # parameters[VALIDATION_IDS],
         )
         if weights:
             # Set the initial weights if available
