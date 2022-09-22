@@ -38,7 +38,7 @@ DEFAULT_HYPERPARAMETERS = {
 DEFAULT_MASK_NAME = "Brain_GM_mask_1mm_MNI_kNN_conservative.nii.gz"
 
 class BrainAge:
-    def __init__(self, parameters, id, images_path, db_type, db_client):
+    def __init__(self, parameters, id, images_path, db_type, db_client, seed=None, split=None):
         """ Initialize the CNN model.
         """
         self.parameters = parameters
@@ -46,8 +46,8 @@ class BrainAge:
         self.mask = None
         self.crop = None
         self.images_path = images_path
-        self.train_loader = DataLoader(images_path, db_type, db_client)
-        self.validation_loader = DataLoader(images_path, db_type, db_client)
+        self.train_loader = DataLoader(images_path, db_type, db_client, seed, split)
+        self.validation_loader = DataLoader(images_path, db_type, db_client, seed, split)
         self.model = self.cnn_model(self.get_parameter)
         # Load the mask if required and available
         mask_path = f"{os.getenv(MODEL_FOLDER)}/{os.getenv(MASK_FILENAME, DEFAULT_MASK_NAME)}"

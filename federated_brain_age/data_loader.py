@@ -9,20 +9,26 @@ from federated_brain_age.image_processing import zerocrop_img, resize_img
 from federated_brain_age.utils import read_csv
 
 class DataLoader:
-    def __init__(self, images_path, db_type, db_client, participants):
+    def __init__(self, images_path, db_type, db_client, participants, training=True, seed=None, split=None):
         self.images_path = images_path
-
+        self.training = training
+        self.seed = seed
         if db_type == DB_CSV:
             #data = read_csv(db_client, column_names=[ID, AGE, SEX], filter=participants, filterKey=ID)
-            data = read_csv(db_client, column_names=[ID, AGE, SEX])
+            data = read_csv(db_client, column_names=[ID, AGE, SEX, CLINICAL_ID, IMAGING_ID, IS_TRAINING_DATA])
         elif db_type == DB_POSTGRES:
             # TODO: Query the database to obtain the data.
             pass
 
-        self.clinical_data = pd.DataFrame(data, columns = [ID, AGE, SEX])
+        self.clinical_data = pd.DataFrame(data, columns = [ID, AGE, SEX, CLINICAL_ID, IMAGING_ID, IS_TRAINING_DATA])
         self.clinical_data = self.clinical_data.set_index(ID)
         participant_list = self.validate_participants(participants)
-        self.participants = participant_list[0]
+        training_participants = random.sample(
+            participant_list[0],
+            len(participant_list[0]) * (split or DEFAULT_SPLIT),
+        )
+        self.participants = training_participants if training else [
+            participant for participant in participant_list[0] if participant not in training_participants]
 
     def validate_participants(self, participants):
         """ Validate if the data from the participants
@@ -32,11 +38,12 @@ class DataLoader:
         for participant in participants:
             try:
                 patient_info = self.clinical_data.loc[participant]
-                patient_filename = patient_info.strip() + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
-                if os.path.exists(os.path.join(self.images_path, patient_filename)):
-                    participants_list[0].append(participant)
-                else:
-                    participants_list[2].append(participant)
+                if self.training == patient_info[IS_TRAINING_DATA]:
+                    patient_filename = patient_info.strip() + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
+                    if os.path.exists(os.path.join(self.images_path, patient_filename)):
+                        participants_list[0].append(participant)
+                    else:
+                        participants_list[2].append(participant)
             except KeyError as error:
                 participants_list[1].append(participant)
         return participants_list

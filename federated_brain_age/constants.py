@@ -24,6 +24,9 @@ XNAT_PROJECT = "XNAT_PROJECT"
 ID = "id"
 SEX = "sex"
 AGE = "age"
+CLINICAL_ID = "clinical_id"
+IMAGING_ID = "imaging_id"
+IS_TRAINING_DATA = "is_training_data"
 
 # Path
 DATA_FOLDER = "DATA_FOLDER"
@@ -54,6 +57,10 @@ MODEL = "MODEL"
 TRAINING_IDS = "TRAINING_IDS"
 VALIDATION_IDS = "VALIDATION_IDS"
 TESTING_IDS = "TESTING_IDS"
+
+SEED = "SEED"
+DATA_SPLIT = "DATA_SPLIT"
+DEFAULT_SPLIT = 0.8
 
 # Hyperparameters - Master
 ROUNDS = "ROUNDS"

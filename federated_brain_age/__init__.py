@@ -1,5 +1,6 @@
 import time
 import os
+import random
 
 import tensorflow as tf
 from vantage6.tools.util import warn, info
@@ -123,12 +124,13 @@ def master(client, db_client, parameters = None):
         missing_parameters = validate_parameters(parameters, {
             MODEL: {
                 MASTER: {
-                    ROUNDS: {}
+                    ROUNDS: {},
                 },
                 NODE: {
                     EPOCHS: {},
-                    USE_MASK: {}
+                    USE_MASK: {},
                 },
+                DATA_SPLIT: {},
             },
             DB_TYPE: {},
         })
@@ -136,6 +138,7 @@ def master(client, db_client, parameters = None):
             parse_error(
                 f"Missing the following parameters: {', '.join(missing_parameters)}"
             )
+
         # Intialize the model
         learning_rate = parameters.get(LEARNING_RATE, 1)
         model_parameters = dict(DEFAULT_HYPERPARAMETERS)
@@ -145,6 +148,11 @@ def master(client, db_client, parameters = None):
         results = {
             METRICS: {}
         }
+        # Set the seed value
+        seed = parameters.get(seed) if parameters.get(seed) is not None else [random.randint(0, 10000)]
+        info(f"Using {seed} as the seed")
+        random.seed(seed)
+        seeds = [random.randint(0, 10000) for i in range(len(ids))]
         # Execute the training
         for i in range(0, parameters[MODEL][MASTER][ROUNDS]):
             info(f"Round {i}/{parameters[MODEL][MASTER][ROUNDS]}")
@@ -162,6 +170,8 @@ def master(client, db_client, parameters = None):
                             ROUNDS: i,
                         },
                         "weights": brain_age_weights,
+                        "seed": seeds[i],
+                        "split": parameters[MODEL][DATA_SPLIT],
                     }
                 }
                 task_id = execute_task(client, input, [id])
@@ -218,7 +228,9 @@ def master(client, db_client, parameters = None):
 
     # process the output
     info("Process the node results")
-    output = {}
+    output = {
+        SEED: seed
+    }
 
     return output
 
@@ -280,7 +292,7 @@ def RPC_check(db_client, parameters):
     output[GPU_COUNT] = len(tf.config.list_physical_devices('GPU'))
     return output
 
-def RPC_brain_age(db_client, parameters, weights):
+def RPC_brain_age(db_client, parameters, weights, seed, split):
     """
     Run the CNN to compute the brain age
 
@@ -323,6 +335,8 @@ def RPC_brain_age(db_client, parameters, weights):
             db_client if parameters[DB_TYPE] != DB_CSV else os.getenv(DATA_FOLDER) + "/dataset.csv",
             # parameters[TRAINING_IDS],
             # parameters[VALIDATION_IDS],
+            seed=seed,
+            split=split,
         )
         if weights:
             # Set the initial weights if available
