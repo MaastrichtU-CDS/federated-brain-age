@@ -10,7 +10,6 @@ from federated_brain_age.utils import read_csv
 
 class DataLoader:
     def __init__(self, images_path, db_type, db_client, participants):
-        self.participants = participants
         self.images_path = images_path
 
         if db_type == DB_CSV:
@@ -22,6 +21,26 @@ class DataLoader:
 
         self.clinical_data = pd.DataFrame(data, columns = [ID, AGE, SEX])
         self.clinical_data = self.clinical_data.set_index(ID)
+        participant_list = self.validate_participants(participants)
+        self.participants = participant_list[0]
+
+    def validate_participants(self, participants):
+        """ Validate if the data from the participants
+            is available.
+        """
+        participants_list = [[], [], []]
+        for participant in participants:
+            try:
+                patient_info = self.clinical_data.loc[participant]
+                patient_filename = patient_info.strip() + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
+                if os.path.exists(os.path.join(self.images_path, patient_filename)):
+                    participants_list[0].append(participant)
+                else:
+                    participants_list[2].append(participant)
+            except KeyError as error:
+                participants_list[1].append(participant)
+        return participants_list
+        
 
     def retrieve_data(self, patient_index, img_size, img_scale=1.0, mask=None, augment=False, mode=[], crop=None):
         """

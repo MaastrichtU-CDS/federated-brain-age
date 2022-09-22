@@ -333,6 +333,9 @@ def RPC_brain_age(db_client, parameters, weights):
         # Retrieve the weights, metrics for the first and last epoch, and the 
         # history if requested
         output[WEIGHTS] = brain_age.model.get_weights()
+        output[SAMPLE_SIZE] = [
+            len(brain_age.train_loader.participants), len(brain_age.validation_loader.participants)
+        ]
         for metric in result.history.keys():
             output[METRICS][metric] = [result.history[metric][0], result.history[metric][-1]]
         if parameters.get(HISTORY):
