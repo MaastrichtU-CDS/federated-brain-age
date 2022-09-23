@@ -13,13 +13,14 @@ PARAMETERS = {
     DB_TYPE: DB_CSV,
     MAX_NUMBER_TRIES: 10,
     SLEEP_TIME: 5,
+    HISTORY: False,
     MODEL: {
         MASTER: {
             ROUNDS: 2
         },
         NODE: {
             USE_MASK: True,
-            EPOCHS: 1,
+            EPOCHS: 2,
             # TRAINING_IDS: {
             #     1: ["2a", "3a"],
             #     # 2: ["2a", "3a"]
@@ -33,6 +34,7 @@ PARAMETERS = {
         DATA_SPLIT: 0.8,
     }
 }
+round_count = 0
 
 lib = importlib.import_module("federated_brain_age")
 
@@ -55,13 +57,18 @@ def mock_get_result(client, tasks, max_number_tries, sleep_time):
     print(f"Mock: get result for tasks {tasks.keys()} within {max_number_tries} tries")
     brain_age_method = getattr(lib, "RPC_brain_age")
     output = {}
+    global round_count
+    round_count += 1
     for task_id in tasks.keys():
         output[task_id] = brain_age_method(
             None,
             {
                 **PARAMETERS[MODEL][NODE],
                 TASK_ID: PARAMETERS[TASK_ID],
-                DB_TYPE: PARAMETERS[DB_TYPE]
+                DB_TYPE: PARAMETERS[DB_TYPE],
+                ROUNDS: round_count,
+                HISTORY: PARAMETERS[HISTORY],
+                
             },
             None,
             1,

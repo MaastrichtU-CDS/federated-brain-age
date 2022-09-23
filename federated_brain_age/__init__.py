@@ -172,6 +172,7 @@ def master(client, db_client, parameters = None):
                             # VALIDATION_IDS: parameters[MODEL][NODE][VALIDATION_IDS][id],
                             # TESTING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
                             ROUNDS: i,
+                            HISTORY: parameters.get(HISTORY),
                         },
                         "weights": brain_age_weights,
                         SEED: seeds[org_num],

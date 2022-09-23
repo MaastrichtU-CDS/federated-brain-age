@@ -109,8 +109,8 @@ class BrainAge:
         # merging braches into final model
         y1 = concatenate([x1, input2]) # other modes: multiply, concatenate, dot
         
-        y2 = Dropout(parameters(DROPOUT))(y2)
-        y2 = Dense(32, activation=RELU)(y1)
+        y2 = Dropout(parameters(DROPOUT))(y1)
+        y2 = Dense(32, activation=RELU)(y2)
 
         final = Dense(1, activation='linear')(y2)
 
