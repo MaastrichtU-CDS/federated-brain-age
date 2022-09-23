@@ -9,9 +9,8 @@ from federated_brain_age.image_processing import zerocrop_img, resize_img
 from federated_brain_age.utils import read_csv
 
 class DataLoader:
-    def __init__(self, images_path, db_type, db_client, participants, training=True, seed=None, split=None):
+    def __init__(self, images_path, db_type, db_client, training=True, validation=False, seed=None, split=None, exclude=[]):
         self.images_path = images_path
-        self.training = training
         self.seed = seed
         if db_type == DB_CSV:
             #data = read_csv(db_client, column_names=[ID, AGE, SEX], filter=participants, filterKey=ID)
@@ -22,24 +21,30 @@ class DataLoader:
 
         self.clinical_data = pd.DataFrame(data, columns = [ID, AGE, SEX, CLINICAL_ID, IMAGING_ID, IS_TRAINING_DATA])
         self.clinical_data = self.clinical_data.set_index(ID)
-        participant_list = self.validate_participants(participants)
-        training_participants = random.sample(
-            participant_list[0],
-            len(participant_list[0]) * (split or DEFAULT_SPLIT),
-        )
-        self.participants = training_participants if training else [
-            participant for participant in participant_list[0] if participant not in training_participants]
+        participant_list = self.validate_participants(list(data[ID]), training, validation)
+        self.participants = []
+        if len(participant_list[0]) > 0:
+            if training:
+                self.participants = random.sample(
+                    participant_list[0],
+                    int(len(participant_list[0]) * (split or DEFAULT_SPLIT)),
+                )
+            else:
+                self.participants = [participant for participant in participant_list[0] if participant not in exclude]
+            print(self.participants)
 
-    def validate_participants(self, participants):
+    def validate_participants(self, participants, training, validation):
         """ Validate if the data from the participants
             is available.
         """
         participants_list = [[], [], []]
         for participant in participants:
             try:
-                patient_info = self.clinical_data.loc[participant]
-                if self.training == patient_info[IS_TRAINING_DATA]:
-                    patient_filename = patient_info.strip() + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
+                patient_info = self.clinical_data.loc[str(participant)]
+                # The flag 'IS_TRAINING_DATA' identifies the data that will be used for
+                # training and thus splitted between training and validation.
+                if (training or validation) == patient_info[IS_TRAINING_DATA]:
+                    patient_filename = str(patient_info[IMAGING_ID]).strip() + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
                     if os.path.exists(os.path.join(self.images_path, patient_filename)):
                         participants_list[0].append(participant)
                     else:

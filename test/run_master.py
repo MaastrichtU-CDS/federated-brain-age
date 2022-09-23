@@ -12,6 +12,7 @@ PARAMETERS = {
     TASK_ID: "test",
     DB_TYPE: DB_CSV,
     MAX_NUMBER_TRIES: 10,
+    SLEEP_TIME: 5,
     MODEL: {
         MASTER: {
             ROUNDS: 2
@@ -19,16 +20,17 @@ PARAMETERS = {
         NODE: {
             USE_MASK: True,
             EPOCHS: 1,
-            TRAINING_IDS: {
-                1: ["2a", "3a"],
-                # 2: ["2a", "3a"]
-            },
-            VALIDATION_IDS: {
-                1: ["4a"],
-                # 2: ["4a"]
-            },
-            #"TESTING_IDS": [[]]
-        }
+            # TRAINING_IDS: {
+            #     1: ["2a", "3a"],
+            #     # 2: ["2a", "3a"]
+            # },
+            # VALIDATION_IDS: {
+            #     1: ["4a"],
+            #     # 2: ["4a"]
+            # },
+            # #"TESTING_IDS": [[]]
+        },
+        DATA_SPLIT: 0.8,
     }
 }
 
@@ -49,7 +51,7 @@ def mock_get_orgarnization(client):
         # }
     ]
 
-def mock_get_result(client, tasks, max_number_tries):
+def mock_get_result(client, tasks, max_number_tries, sleep_time):
     print(f"Mock: get result for tasks {tasks.keys()} within {max_number_tries} tries")
     brain_age_method = getattr(lib, "RPC_brain_age")
     output = {}
@@ -58,12 +60,12 @@ def mock_get_result(client, tasks, max_number_tries):
             None,
             {
                 **PARAMETERS[MODEL][NODE],
-                TRAINING_IDS: PARAMETERS[MODEL][NODE][TRAINING_IDS][task_id],
-                VALIDATION_IDS: PARAMETERS[MODEL][NODE][VALIDATION_IDS][task_id],
                 TASK_ID: PARAMETERS[TASK_ID],
                 DB_TYPE: PARAMETERS[DB_TYPE]
             },
-            None
+            None,
+            1,
+            0.7,
         )
     return output
 

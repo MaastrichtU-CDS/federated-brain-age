@@ -55,6 +55,6 @@ def validate_parameters(input, parameters):
     for parameter in parameters.keys():
         if parameter not in input:
             missing_parameters.append(parameter)
-        elif len(parameters[parameter].keys() > 0):
-            missing_parameters.extend(input[parameter], parameters[parameter])
+        elif len(parameters[parameter].keys()) > 0:
+            missing_parameters.extend(validate_parameters(input[parameter], parameters[parameter]))
     return missing_parameters

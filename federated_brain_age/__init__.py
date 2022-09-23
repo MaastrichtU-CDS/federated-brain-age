@@ -115,10 +115,12 @@ def master(client, db_client, parameters = None):
             max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES,
             sleep_time=parameters.get(SLEEP_TIME) or DEFAULT_SLEEP_TIME,
         )
-        return [{
-            ORGANIZATION_ID: tasks[key],
-            RESULT: result,
-        } for key, result in output.items()]
+        return {
+            CHECK: [{
+                ORGANIZATION_ID: tasks[key],
+                RESULT: result,
+                } for key, result in output.items()]
+            }
     elif parameters[TASK] == TRAIN:
         # Validate the input
         missing_parameters = validate_parameters(parameters, {
@@ -134,8 +136,8 @@ def master(client, db_client, parameters = None):
             },
             DB_TYPE: {},
         })
-        if missing_parameters:
-            parse_error(
+        if len(missing_parameters) > 0:
+            return parse_error(
                 f"Missing the following parameters: {', '.join(missing_parameters)}"
             )
 
@@ -145,19 +147,21 @@ def master(client, db_client, parameters = None):
         #model_parameters[INPUT_SHAPE] = parameters[INPUT_SHAPE]
         brain_age_model = BrainAge.cnn_model(model_parameters.get)
         brain_age_weights = brain_age_model.get_weights()
-        results = {
-            METRICS: {}
-        }
         # Set the seed value
-        seed = parameters.get(seed) if parameters.get(seed) is not None else [random.randint(0, 10000)]
+        seed = parameters.get(SEED) if parameters.get(SEED) is not None else random.randint(0, 10000)
         info(f"Using {seed} as the seed")
         random.seed(seed)
-        seeds = [random.randint(0, 10000) for i in range(len(ids))]
+        # Output
+        results = {
+            METRICS: {},
+            SEED: seed,
+        }
         # Execute the training
         for i in range(0, parameters[MODEL][MASTER][ROUNDS]):
             info(f"Round {i}/{parameters[MODEL][MASTER][ROUNDS]}")
+            seeds = [random.randint(0, 10000) for i in range(len(ids))]
             tasks = {}
-            for id in ids:
+            for org_num, org_id in enumerate(ids):
                 input = {
                     "method": ALGORITHM,
                     "args": [],
@@ -170,16 +174,19 @@ def master(client, db_client, parameters = None):
                             ROUNDS: i,
                         },
                         "weights": brain_age_weights,
-                        "seed": seeds[i],
-                        "split": parameters[MODEL][DATA_SPLIT],
+                        SEED: seeds[org_num],
+                        DATA_SPLIT: parameters[MODEL][DATA_SPLIT],
                     }
                 }
-                task_id = execute_task(client, input, [id])
+                task_id = execute_task(client, input, [org_id])
                 tasks[task_id] = {
-                    ORGANIZATION_ID: id
+                    ORGANIZATION_ID: org_id
                 }
             output = get_result(
-                client, tasks, max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES
+                client,
+                tasks,
+                max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES,
+                sleep_time=parameters.get(SLEEP_TIME) or DEFAULT_SLEEP_TIME
             )
             # TODO: Validate if there are errors in the results:
             # Log the information and terminate the training
@@ -188,7 +195,7 @@ def master(client, db_client, parameters = None):
             errors = check_errors(output_data)
             if errors:
                 warn("Encountered an error, please review the parameters")
-                return errors
+                return { ERROR: errors }
 
             info("Aggregating the results")
             metrics = {}
@@ -198,6 +205,7 @@ def master(client, db_client, parameters = None):
                     ORGANIZATION_ID: tasks[task_id][ORGANIZATION_ID],
                     HISTORY: result[HISTORY],
                     METRICS: result[METRICS],
+                    SAMPLE_SIZE: result[SAMPLE_SIZE]
                 }
             results[METRICS][i] = metrics
             # Update the model weights
@@ -292,7 +300,7 @@ def RPC_check(db_client, parameters):
     output[GPU_COUNT] = len(tf.config.list_physical_devices('GPU'))
     return output
 
-def RPC_brain_age(db_client, parameters, weights, seed, split):
+def RPC_brain_age(db_client, parameters, weights, seed, data_split):
     """
     Run the CNN to compute the brain age
 
@@ -336,24 +344,25 @@ def RPC_brain_age(db_client, parameters, weights, seed, split):
             # parameters[TRAINING_IDS],
             # parameters[VALIDATION_IDS],
             seed=seed,
-            split=split,
+            split=data_split,
         )
-        if weights:
-            # Set the initial weights if available
-            brain_age.model.set_weights(weights)
-        output[SAMPLES] = 1
-        # Train the model
-        result = brain_age.train()
-        # Retrieve the weights, metrics for the first and last epoch, and the 
-        # history if requested
-        output[WEIGHTS] = brain_age.model.get_weights()
         output[SAMPLE_SIZE] = [
             len(brain_age.train_loader.participants), len(brain_age.validation_loader.participants)
         ]
-        for metric in result.history.keys():
-            output[METRICS][metric] = [result.history[metric][0], result.history[metric][-1]]
-        if parameters.get(HISTORY):
-            output[HISTORY] = result.history
+        if len(brain_age.train_loader.participants) > 0:
+            if weights:
+                # Set the initial weights if available
+                brain_age.model.set_weights(weights)
+            output[SAMPLES] = 1
+            # Train the model
+            result = brain_age.train()
+            # Retrieve the weights, metrics for the first and last epoch, and the 
+            # history if requested
+            output[WEIGHTS] = brain_age.model.get_weights()
+            for metric in result.history.keys():
+                output[METRICS][metric] = [result.history[metric][0], result.history[metric][-1]]
+            if parameters.get(HISTORY):
+                output[HISTORY] = result.history
     except Exception as error:
         output[ERROR] = f"Error while training the model: {str(error)}"
     return output

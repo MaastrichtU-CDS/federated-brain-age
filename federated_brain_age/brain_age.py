@@ -46,8 +46,12 @@ class BrainAge:
         self.mask = None
         self.crop = None
         self.images_path = images_path
-        self.train_loader = DataLoader(images_path, db_type, db_client, seed, split)
-        self.validation_loader = DataLoader(images_path, db_type, db_client, seed, split)
+        self.train_loader = DataLoader(
+            images_path, db_type, db_client, training=True, seed=seed, split=split
+        )
+        self.validation_loader = DataLoader(
+            images_path, db_type, db_client, training=False, validation=True, seed=seed, split=split, exclude=self.train_loader.participants
+        )
         self.model = self.cnn_model(self.get_parameter)
         # Load the mask if required and available
         mask_path = f"{os.getenv(MODEL_FOLDER)}/{os.getenv(MASK_FILENAME, DEFAULT_MASK_NAME)}"
@@ -177,22 +181,28 @@ class BrainAge:
         img_size = self.initialize()
         img_scale = self.get_parameter(IMG_SCALE)
         # history = LossHistory(epochs, modelversion)
-        #checkpoint = self.save_model()
+        # checkpoint = self.save_model()
+        # Early stopping
         stoptraining = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=0, mode='min')
-
+        # Calculate the training steps
         patients_per_epoch = min(self.get_parameter(PATIENTS_PER_EPOCH), len(self.train_loader.participants))
         steps_per_epoch = int(math.ceil(float(patients_per_epoch)/batch_size))
-        validation_steps = int(math.ceil(float(len(self.validation_loader.participants))/batch_size))
-
+        # Check if there is data for the validation
+        validation_data = None
+        validation_steps = None
+        if len(self.validation_loader.participants) > 0:
+            validation_steps = int(math.ceil(float(len(self.validation_loader.participants))/batch_size))
+            validation_data = self.validation_loader.data_generator(
+                img_size, batch_size, img_scale, mask=self.mask, augment=False, mode=[], shuffle=False, crop=self.crop
+            )
+        # Train the model
         return self.model.fit(
             self.train_loader.data_generator(
                 img_size, batch_size, img_scale, mask=self.mask, augment=False, mode=[], shuffle=True, crop=self.crop
             ),
             steps_per_epoch=steps_per_epoch,
             epochs=self.get_parameter(EPOCHS),
-            validation_data=self.validation_loader.data_generator(
-                img_size, batch_size, img_scale, mask=self.mask, augment=False, mode=[], shuffle=False, crop=self.crop
-            ),
+            validation_data=validation_data,
             validation_steps=validation_steps,
             max_queue_size=1,
             callbacks=[stoptraining])
