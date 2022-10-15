@@ -18,6 +18,7 @@ from vantage6.tools.exceptions import DeserializationException
 from typing import BinaryIO
 
 from federated_brain_age.constants import ERROR
+from federated_brain_age.postgres_manager import PostgresManager
 
 # from sshtunnel import SSHTunnelForwarder
 
@@ -85,8 +86,11 @@ def docker_wrapper(module: str):
         # - Get the database client
         info(f"Connecting to {os.getenv(PGDATABASE)}")
         try:
+            # Directly connecting
             connection = psycopg2.connect(PGURI)
             db_client = connection.cursor()
+            # Using the Manager class
+            # db_client = PostgresManager(db_env_var=os.getenv(PGDATABASE))
             info("Successfully connected to the database")       
         except Exception as error:
             info("Database unavailable")

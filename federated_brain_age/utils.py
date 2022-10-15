@@ -2,18 +2,23 @@
 """
 import os
 
+import numpy as np
 import pandas as pd
+import tensorflow as tf
 
 from federated_brain_age.constants import *
 
-def run_sql(db_client, sql_statement, parameters=None, fetch_all=False):
+def run_sql(db_client, sql_statement, parameters=None, fetch_one=False, fetch_all=False):
     """ Execute the sql query and retrieve the results
     """
+    result = None
     db_client.execute(sql_statement, parameters)
     if fetch_all:
-        return db_client.fetchall()
-    else:
-        return db_client.fetchone()
+        result = db_client.fetchall()
+    elif fetch_one:
+        result = db_client.fetchone()
+    db_client.execute("COMMIT")
+    return result
 
 def parse_error(error_message):
     """ Parse an error message.
@@ -58,3 +63,18 @@ def validate_parameters(input, parameters):
         elif len(parameters[parameter].keys()) > 0:
             missing_parameters.extend(validate_parameters(input[parameter], parameters[parameter]))
     return missing_parameters
+
+def np_array_to_list(array):
+    parsed_list = []
+    if type(array) is list:
+        for element in array:
+            if type(element) in [np.ndarray, list]:
+                parsed_list.append(np_array_to_list(element))
+            # tensorflow.python.framework.ops.EagerTensor
+            elif tf.is_tensor(element):
+                parsed_list.append(element.numpy().tolist())
+            else:
+                parsed_list.append(element)
+    elif type(array) is np.ndarray:
+        parsed_list = array.tolist()
+    return parsed_list

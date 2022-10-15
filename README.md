@@ -35,7 +35,7 @@ Parameter description:
 - TASK: task to execute (TRAIN, CHECK, PREDICT);
   - TRAIN: train the model;
   - CHECK: evaluate if the necessary components are available (GPU cluster, data, XNAT, ...)
-- TASK_ID: identifies the task to later resume if necessary;
+- MODEL_ID: identifies the task to later resume if necessary;
 - DB_TYPE: database type (POSTGRES, CSV);
 - MAX_NUMBER_TRIES: number of tries to retrieve the result from the node;
 - MODEL: parameters for the model
@@ -50,7 +50,7 @@ Parameter description:
 ```python
 PARAMETERS = {
     TASK: "TRAIN",
-    TASK_ID: "test",
+    MODEL_ID: "test",
     DB_TYPE: "CSV,
     MAX_NUMBER_TRIES: 10,
     MODEL: {
