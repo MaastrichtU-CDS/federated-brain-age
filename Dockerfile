@@ -17,4 +17,4 @@ RUN pip install /app
 ENV PKG_NAME=${PKG_NAME}
 
 # Execute the docker wrapper when running the image
-CMD python -c "from federated_brain_age.docker_wrapper import docker_wrapper; docker_wrapper('${PKG_NAME}')"
+CMD python -c "from federated_brain_age.docker_wrapper_v6 import docker_wrapper; docker_wrapper('${PKG_NAME}')"

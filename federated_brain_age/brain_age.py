@@ -26,13 +26,15 @@ DEFAULT_HYPERPARAMETERS = {
     CROP_INDEXES: None,
     AUGMENT_TRAIN: True,
     IMG_SCALE: 1.0,
-    BATCH_SIZE: 1,
+    BATCH_SIZE: 4,
     PATIENTS_PER_EPOCH: 4, # steps_per_epoch = patients_per_epoch / batch_size
     EPOCHS: 4,
     DROPOUT: 0.2,
     STARTING_STEP: 0,
     DECAY_STEPS: 1,
     ROUNDS: 0,
+    EARLY_STOPPING: True,
+    USE_MASK: True,
 }
 
 DEFAULT_MASK_NAME = "Brain_GM_mask_1mm_MNI_kNN_conservative.nii.gz"
@@ -47,19 +49,50 @@ class BrainAge:
         self.crop = None
         self.images_path = images_path
         self.train_loader = DataLoader(
-            images_path, db_type, db_client, training=True, seed=seed, split=split
+            images_path,
+            db_type,
+            db_client,
+            training=True,
+            seed=seed,
+            split=split,
         )
         self.validation_loader = DataLoader(
-            images_path, db_type, db_client, training=False, validation=True, seed=seed, split=split, exclude=self.train_loader.participants
+            images_path,
+            db_type,
+            db_client,
+            training=False,
+            validation=True,
+            seed=seed,
+            split=split,
+            exclude=self.train_loader.participants,
         )
-        self.model = self.cnn_model(self.get_parameter)
+        steps_per_epoch = int(math.ceil(float(min(
+            self.get_parameter(PATIENTS_PER_EPOCH), len(self.train_loader.participants)
+        ) / self.get_parameter(BATCH_SIZE))))
+        self.model = self.cnn_model(self.get_parameter, steps_per_epoch)
         # Load the mask if required and available
         mask_path = f"{os.getenv(MODEL_FOLDER)}/{os.getenv(MASK_FILENAME, DEFAULT_MASK_NAME)}"
-        if USE_MASK in parameters and parameters[USE_MASK] and os.path.exists(mask_path):
+        if self.get_parameter(USE_MASK) and os.path.exists(mask_path):
             self.mask = nib.load(mask_path).get_data()
+    
+    @staticmethod
+    def get_metrics(loader, y_pred, prefix=''):
+        """ Calculate the metrics.
+        """
+        metrics = {
+            f"{prefix}{MAE}": -1,
+            f"{prefix}{MSE}": -1,
+        }
+        if len(loader.participants) > 0:
+            y_true = list(loader.clinical_data.loc[loader.participants, AGE].values)
+            metrics = {
+                f"{prefix}{MAE}": float(keras.metrics.mean_absolute_error(y_true, y_pred)),
+                f"{prefix}{MSE}": float(keras.metrics.mean_squared_error(y_true, y_pred)),
+            }
+        return metrics
 
     @staticmethod
-    def cnn_model(parameters):
+    def cnn_model(parameters, steps_per_epoch = 1):
         """ Define the CNN mode.
 
             parameters: callback to retrieve the parameters.
@@ -119,7 +152,6 @@ class BrainAge:
         # Adam optimizer with an extended learning rate sceduler
         # to allow restarting the training from a previous point
         # in the same conditions.
-        steps_per_epoch = parameters(PATIENTS_PER_EPOCH) / parameters(BATCH_SIZE)
         adam_opt = keras.optimizers.Adam(
             learning_rate = DecayingLRSchedule(
                 parameters(LEARNING_RATE),
@@ -145,7 +177,7 @@ class BrainAge:
             default value.
         """
         return self.parameters[parameter] if parameter in self.parameters \
-            else DEFAULT_HYPERPARAMETERS[parameter]
+            else DEFAULT_HYPERPARAMETERS.get(parameter)
 
     def initialize(self):
         """ Initialize and load the necessary information.
@@ -183,7 +215,10 @@ class BrainAge:
         # history = LossHistory(epochs, modelversion)
         # checkpoint = self.save_model()
         # Early stopping
-        stoptraining = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=0, mode='min')
+        callbacks = []
+        if self.get_parameter(EARLY_STOPPING):
+            stoptraining = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=0, mode='min')
+            callbacks.append(stoptraining)
         # Calculate the training steps
         patients_per_epoch = min(self.get_parameter(PATIENTS_PER_EPOCH), len(self.train_loader.participants))
         steps_per_epoch = int(math.ceil(float(patients_per_epoch)/batch_size))
@@ -198,12 +233,51 @@ class BrainAge:
         # Train the model
         return self.model.fit(
             self.train_loader.data_generator(
-                img_size, batch_size, img_scale, mask=self.mask, augment=False, mode=[], shuffle=True, crop=self.crop
+                img_size, batch_size, img_scale, mask=self.mask, augment=True, mode=[], shuffle=True, crop=self.crop
             ),
-            steps_per_epoch=steps_per_epoch,
+            steps_per_epoch = steps_per_epoch,
             epochs=self.get_parameter(EPOCHS),
-            validation_data=validation_data,
-            validation_steps=validation_steps,
-            max_queue_size=1,
-            callbacks=[stoptraining])
-            #callbacks=[history, checkpoint, stoptraining])
+            validation_data = validation_data,
+            validation_steps = validation_steps,
+            max_queue_size = 1,
+            callbacks = callbacks
+            #callbacks=[history, checkpoint, stoptraining]
+        )
+
+    def predict(self, data_loader = None):
+        """ Make the predictions for the data
+        """
+        print("Predict")
+        predictions_by_participant = {}
+        # Load the parameters
+        batch_size = self.get_parameter(BATCH_SIZE)
+        img_size = self.initialize()
+        img_scale = self.get_parameter(IMG_SCALE)
+        # Prepare the data loader
+        if not data_loader:
+            data_loader = {
+                TRAIN: self.train_loader,
+                VALIDATION: self.validation_loader
+            }
+        for key, loader in data_loader.items():
+            predictions_by_participant[key] = {}
+            if len(loader.participants) > 0:
+                predictions = self.model.predict(
+                    loader.data_generator(
+                        img_size,
+                        batch_size,
+                        img_scale,
+                        mask=self.mask,
+                        augment=False,
+                        mode=[],
+                        shuffle=False,
+                        crop=self.crop
+                    ),
+                    max_queue_size = 1,
+                    batch_size = self.get_parameter(BATCH_SIZE),
+                    steps=int(math.ceil(float(len(loader.participants))/batch_size))
+                )
+                predictions_by_participant[key] = dict(
+                    zip(loader.participants, [float(p) for p in predictions.flatten()])
+                )
+        return predictions_by_participant

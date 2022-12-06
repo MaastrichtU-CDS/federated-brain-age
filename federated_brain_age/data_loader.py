@@ -14,24 +14,34 @@ class DataLoader:
         self.seed = seed
         if db_type == DB_CSV:
             #data = read_csv(db_client, column_names=[ID, AGE, SEX], filter=participants, filterKey=ID)
-            data = read_csv(db_client, column_names=[ID, AGE, SEX, CLINICAL_ID, IMAGING_ID, IS_TRAINING_DATA])
+            data = read_csv(db_client, column_names=[ID, CLINICAL_ID, IMAGING_ID, AGE, SEX, IS_TRAINING_DATA])
         elif db_type == DB_POSTGRES:
             # TODO: Query the database to obtain the data.
             pass
+        else:
+            raise Exception("Missing the database type variable.")
 
-        self.clinical_data = pd.DataFrame(data, columns = [ID, AGE, SEX, CLINICAL_ID, IMAGING_ID, IS_TRAINING_DATA])
+        self.clinical_data = pd.DataFrame(data, columns = [ID, CLINICAL_ID, IMAGING_ID, AGE, SEX, IS_TRAINING_DATA])
         self.clinical_data = self.clinical_data.set_index(ID)
-        participant_list = self.validate_participants(list(data[ID]), training, validation)
+        self.participant_list = self.validate_participants(list(data[ID]), training, validation)
+        # Set the seed
+        random.seed(self.seed)
+        # Make the data split
         self.participants = []
-        if len(participant_list[0]) > 0:
+        if len(self.participant_list[0]) > 0:
             if training:
-                self.participants = random.sample(
-                    participant_list[0],
-                    int(len(participant_list[0]) * (split or DEFAULT_SPLIT)),
-                )
+                self.participants = [
+                    self.participant_list[0][i] for i in sorted(
+                        random.sample(
+                            list(range(0, len(self.participant_list[0]))),
+                            int(len(self.participant_list[0]) * (split or DEFAULT_SPLIT)),
+                        )
+                    )
+                ]
             else:
-                self.participants = [participant for participant in participant_list[0] if participant not in exclude]
-            print(self.participants)
+                self.participants = [
+                    participant for participant in self.participant_list[0] if participant not in exclude
+                ]
 
     def validate_participants(self, participants, training, validation):
         """ Validate if the data from the participants
@@ -177,10 +187,9 @@ class DataLoader:
             else:
                 batch_size = int(batch_size)
                 patient_sublist = [self.participants[p:p+batch_size] for p in range(0, len(self.participants), batch_size)]
-
             count = 0
             data = []
-            for batch in range(0, len(patient_sublist)):         
+            for batch in range(0, len(patient_sublist)):
                 #get the data of a batch samples/patients
                 data.append(self.generate_batch(patient_sublist[batch], img_size, img_scale, mask, augment, mode, crop))
                 count = count + len(patient_sublist[batch])

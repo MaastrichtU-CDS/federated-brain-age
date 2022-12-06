@@ -6,19 +6,20 @@ algorithms with uniform input and output handling.
 
 import os
 import pickle
-import time
+# import time
 
 import psycopg2
 
-from vantage6.tools.dispatch_rpc import dispact_rpc
+# from vantage6.tools.dispatch_rpc import dispact_rpc
+from federated_brain_age.dispatch_rpc_v6 import dispact_rpc
 from vantage6.tools.util import info, warn
 from vantage6.tools import deserialization, serialization
 from vantage6.tools.data_format import DataFormat
 from vantage6.tools.exceptions import DeserializationException
 from typing import BinaryIO
 
-from federated_brain_age.constants import ERROR
-from federated_brain_age.postgres_manager import PostgresManager
+# from federated_brain_age.constants import ERROR
+# from federated_brain_age.postgres_manager import PostgresManager
 
 # from sshtunnel import SSHTunnelForwarder
 
@@ -32,6 +33,8 @@ DATABASE_PASSWORD = "DATABASE_PASSWORD"
 DATABASE_PORT = "DATABASE_PORT"
 DATABASE_USER = "DATABASE_USER"
 DATABASE_NAME = "DATABASE_NAME"
+
+ERROR = "ERROR"
 
 def docker_wrapper(module: str):
     """
@@ -81,10 +84,6 @@ def docker_wrapper(module: str):
         info(f"Reading token file '{token_file}'")
         with open(token_file) as fp:
             token = fp.read().strip()
-    else:
-        # Nodes running the algorithm
-        # - Get the database client
-        info(f"Connecting to {os.getenv(PGDATABASE)}")
         try:
             # Directly connecting
             connection = psycopg2.connect(PGURI)
@@ -95,14 +94,37 @@ def docker_wrapper(module: str):
         except Exception as error:
             info("Database unavailable")
             info(str(error))
-            # write_output(
-            #     output_format,
-            #     {
-            #         ERROR: f"DB connection error: {str(error)}",
-            #     },
-            #     output_file
-            # )
-            # return None
+            write_output(
+                output_format,
+                {
+                    ERROR: f"DB connection error: {str(error)}",
+                },
+                output_file
+            )
+            return None
+
+    #else:
+        # Nodes running the algorithm
+        # - Get the database client
+        # info(f"Connecting to {os.getenv(PGDATABASE)}")
+        # try:
+        #     # Directly connecting
+        #     connection = psycopg2.connect(PGURI)
+        #     db_client = connection.cursor()
+        #     # Using the Manager class
+        #     # db_client = PostgresManager(db_env_var=os.getenv(PGDATABASE))
+        #     info("Successfully connected to the database")       
+        # except Exception as error:
+        #     info("Database unavailable")
+        #     info(str(error))
+        #     write_output(
+        #         output_format,
+        #         {
+        #             ERROR: f"DB connection error: {str(error)}",
+        #         },
+        #         output_file
+        #     )
+        #     return None
 
     # make the actual call to the method/function
     info("Dispatching ...")
