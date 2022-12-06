@@ -228,12 +228,12 @@ class BrainAge:
         if len(self.validation_loader.participants) > 0:
             validation_steps = int(math.ceil(float(len(self.validation_loader.participants))/batch_size))
             validation_data = self.validation_loader.data_generator(
-                img_size, batch_size, img_scale, mask=self.mask, augment=False, mode=[], shuffle=False, crop=self.crop
+                img_size, batch_size, img_scale, mask=self.mask, mode=[], shuffle=False, crop=self.crop
             )
         # Train the model
         return self.model.fit(
             self.train_loader.data_generator(
-                img_size, batch_size, img_scale, mask=self.mask, augment=True, mode=[], shuffle=True, crop=self.crop
+                img_size, batch_size, img_scale, mask=self.mask, mode=[], shuffle=True, crop=self.crop
             ),
             steps_per_epoch = steps_per_epoch,
             epochs=self.get_parameter(EPOCHS),
@@ -268,7 +268,6 @@ class BrainAge:
                         batch_size,
                         img_scale,
                         mask=self.mask,
-                        augment=False,
                         mode=[],
                         shuffle=False,
                         crop=self.crop

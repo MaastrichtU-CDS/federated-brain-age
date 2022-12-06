@@ -64,14 +64,13 @@ class DataLoader:
         return participants_list
         
 
-    def retrieve_data(self, patient_index, img_size, img_scale=1.0, mask=None, augment=False, mode=[], crop=None):
+    def retrieve_data(self, patient_index, img_size, img_scale=1.0, mask=None, mode=[], crop=None):
         """
         Function to retrieve data from a single patient
         
         Inputs:
         - patient_index = list of bigrfullnames identifying scans
         - mask = mask image if necessary [default = None]
-        - augment = Boolean if data augmentation should be used [default = False]
         - mode = train, validate or test (used to find appropriate data)
         
         Outputs:
@@ -118,7 +117,7 @@ class DataLoader:
         
         return np.array(img_data), np.array(int(input2)), label
 
-    def generate_batch(self, patients, img_size, img_scale=1.0, mask=None, augment=False, mode=[], crop=None):
+    def generate_batch(self, patients, img_size, img_scale=1.0, mask=None, mode=[], crop=None):
         """
         iterate through a batch of patients and get the corresponding data
         
@@ -127,7 +126,6 @@ class DataLoader:
         - img_size = size of MRI images
         - img_scale = scale of the MRI scans [default = 1]
         - mask = mask image if necessary [default = None]
-        - augment = Boolean if data augmentation should be used [default = False]
         - mode
         
         Outputs:
@@ -141,7 +139,7 @@ class DataLoader:
         sex = []
         for patient in patients:
             try:
-                x, x2, y = self.retrieve_data(patient, img_size, img_scale, mask, augment, mode, crop)
+                x, x2, y = self.retrieve_data(patient, img_size, img_scale, mask, mode, crop)
                 img_data.append(x)
                 sex.append(x2)
                 label_data.append(y)
@@ -162,7 +160,7 @@ class DataLoader:
 
         return ([img_data, sex_data], [label_data])
 
-    def data_generator(self, img_size, batch_size, img_scale=1.0, mask=None, augment=False, mode=[], shuffle=True, crop=None):
+    def data_generator(self, img_size, batch_size, img_scale=1.0, mask=None, mode=[], shuffle=True, crop=None):
         """
         Provides the inputs and the label to the convolutional network during training
         
@@ -171,7 +169,6 @@ class DataLoader:
         - batch_size = size of batch used in training
         - img_scale = scale of the MRI scans [default = 1]
         - mask = mask image if necessary [default = None]
-        - augment = Boolean if data augmentation should be used [default = False]
         
         Output:
         - Data = continous data output for batches used in training the network
@@ -191,7 +188,7 @@ class DataLoader:
             data = []
             for batch in range(0, len(patient_sublist)):
                 #get the data of a batch samples/patients
-                data.append(self.generate_batch(patient_sublist[batch], img_size, img_scale, mask, augment, mode, crop))
+                data.append(self.generate_batch(patient_sublist[batch], img_size, img_scale, mask, mode, crop))
                 count = count + len(patient_sublist[batch])
                 #yield the data and pop for memory clearing
                 yield data.pop()
