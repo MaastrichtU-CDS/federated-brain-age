@@ -13,7 +13,7 @@ from tensorflow.keras.layers import Input, concatenate
 from federated_brain_age.callbacks import DecayingLRSchedule
 from federated_brain_age.constants import *
 from federated_brain_age.data_loader import DataLoader
-from federated_brain_age.image_processing import zerocrop_img, imgZeropad
+from federated_brain_age.image_processing import imgZeropad
 
 DEFAULT_HYPERPARAMETERS = {
     INPUT_SHAPE: (160, 192, 144, 1),
@@ -24,7 +24,7 @@ DEFAULT_HYPERPARAMETERS = {
     DECAY: 1e-4,
     USE_PADDING: True,
     CROP_INDEXES: None,
-    AUGMENT_TRAIN: True,
+    AUGMENT_TRAIN: False,
     IMG_SCALE: 1.0,
     BATCH_SIZE: 4,
     PATIENTS_PER_EPOCH: 4, # steps_per_epoch = patients_per_epoch / batch_size
@@ -185,7 +185,7 @@ class BrainAge:
         if self.mask is not None:
             # when applying a mask, initialize zerocropping
             self.crop = imgZeropad(self.mask, use_padding=self.get_parameter(USE_PADDING))
-            img_size = np.array(np.array(self.crop.zerocrop_img(self.mask)).shape)
+            img_size = np.array(np.array(self.crop.zerocrop_img(self.mask, augment=self.get_parameter(AUGMENT_TRAIN))).shape)
             # img_size = np.array(np.array(zerocrop_img(self.mask, padding=self.get_parameter(USE_PADDING))).shape)
         else:
             # TODO: Getting the first scan may require some changes in the data folder path
