@@ -10,42 +10,52 @@ from vantage6.tools.util import warn, info
 from federated_brain_age.brain_age import BrainAge, DEFAULT_HYPERPARAMETERS
 from federated_brain_age.constants import *
 from federated_brain_age.utils import *
-from federated_brain_age.xnat_client import retrieve_data
-from federated_brain_age.postgres_manager import PostgresManager
-from federated_brain_age.db_builder import get_model_by_id, get_last_run_by_id, insert_model, insert_run, update_run
+from federated_brain_age.data_loader import DataLoader
+from federated_brain_age.db_builder import *
 
-def get_orgarnization(client):
+def get_orgarnization(client, org_ids):
     # obtain organizations that are within the collaboration
     info("Obtaining the organizations in the collaboration")
-    organizations = client.get_organizations_in_my_collaboration()
-    # ids = [organization.get("id") for organization in organizations]
+    organizations = [organization for organization in client.get_organizations_in_my_collaboration() if \
+        not org_ids or organization.get("id") in org_ids]
     return organizations 
 
-def execute_task(client, input, org_ids):
+def execute_task(client, input, org_ids, algorithm_image = None):
     # collaboration and image are stored in the key, so we do not need
     # to specify these
-    info("Creating node tasks")
+    info(f"Creating node tasks for organization(s): {', '.join([str(org_id) for org_id in org_ids])}")
+    if algorithm_image is not None:
+        input["algorithm_image"] = algorithm_image
     task = client.create_new_task(
         input,
         organization_ids=org_ids
     )
-    return task.get("id")
+    task_id = task.get("id")
+    print(f"Task id: {str(task_id)}")
+    return task_id
 
 def get_result(client, tasks, max_number_tries=DEFAULT_MAX_NUMBER_TRIES, sleep_time=60):
     # Get the task's result
     results = {}
     tries = 0
-    while len(results.keys()) != len(tasks) or tries > max_number_tries:
-        # TODO: Set a better value for the timer
+    while len(results.keys()) < len(tasks) and tries <= max_number_tries:
+        # TODO: Set a better value for the timerz
         time.sleep(sleep_time)
         tries += 1
         for task_id in tasks.keys():
-            if task_id not in results:
-                info("Waiting for results")
+            if task_id not in results.keys():
+                info(f"Waiting for results: {task_id}")
                 task = client.request(f"task/{task_id}")
                 if task.get("complete"):
                     info("Obtaining results")
-                    results[task_id] = client.get_results(task_id=task.get("id"))
+                    task_results = client.get_results(task_id=task.get("id"))
+                    if task_results and len(task_results) == 1 and \
+                        type(task_results[0]) is dict and len(task_results[0].keys()) > 0:
+                        results[task_id] = task_results[0]
+                    else:
+                        results[task_id] = {
+                            ERROR: "Task didn't return a result"
+                        }   
     # Check the tasks that didn't complete in time
     for task_id in tasks.keys():
         if task_id not in results:
@@ -54,7 +64,7 @@ def get_result(client, tasks, max_number_tries=DEFAULT_MAX_NUMBER_TRIES, sleep_t
             }
     return results
 
-def master(client, db_client, parameters = None):
+def master(client, db_client, parameters = None, org_ids = None, algorithm_image = None):
     """
     Master algorithm to compute the brain age CNN of the federated datasets.
 
@@ -80,8 +90,9 @@ def master(client, db_client, parameters = None):
         }
 
     # Get the organizations in the collaboration
-    orgs = get_orgarnization(client)
+    orgs = get_orgarnization(client, org_ids)
     ids = [org.get("id") for org in orgs]
+    info(f"Sending the algorithm to the following organizations: {', '.join(str(id) for id in ids)}")
 
     # Check which task has been requested
     info(f"Task requested: {parameters[TASK]}")
@@ -107,7 +118,7 @@ def master(client, db_client, parameters = None):
                     },
                 },
             }
-            task_id = execute_task(client, input, [id])
+            task_id = execute_task(client, input, [id], algorithm_image)
             tasks[task_id] = {
                 ORGANIZATION_ID: id
             }
@@ -119,6 +130,90 @@ def master(client, db_client, parameters = None):
         )
         return {
             CHECK: [{
+                ORGANIZATION_ID: tasks[key],
+                RESULT: result,
+                } for key, result in output.items()]
+            }
+    elif parameters[TASK] == PREDICT:
+        # Validate the input
+        missing_parameters = validate_parameters(parameters, {
+            DB_TYPE: {},
+            MODEL_ID: {}
+        })
+        if missing_parameters:
+            parse_error(
+                f"Missing the following parameters: {', '.join(missing_parameters)}"
+            )
+        # Retrieve the necessary data from the database
+        model_info = {
+            ID: None,
+            SEED: None,
+            ROUND: 0,
+            WEIGHTS: None,
+            DATA_SPLIT: None,
+        }
+        info("Request to save the model")
+        model_info[ID] = parameters[MODEL_ID]
+        try:
+            result = get_model_by_id(parameters[MODEL_ID], db_client)
+            if result:
+                info("Get existing model")
+                model_info[SEED] = result[2]
+                model_info[DATA_SPLIT] = result[3]
+                last_run = get_run_by_id_round(parameters[MODEL_ID], parameters[ROUND], db_client) if \
+                    ROUND in parameters else get_last_run_by_id(parameters[MODEL_ID], db_client)
+                if last_run:
+                    model_info[ROUND] = last_run[3]
+                    model_info[WEIGHTS] = last_run[4]
+            else:
+                error_message = f"Unable to find the model with ID: {str(parameters[MODEL_ID])}"
+                warn(error_message)
+                return {
+                    ERROR: error_message
+                }
+        except Exception as error:
+            error_message = f"Unable to connect to the database and retrieve the model: {str(error)}"
+            warn(error_message)
+            return {
+                ERROR: error_message
+            }
+        # Set the seed value
+        info(f"Using {model_info[SEED]} as the seed")
+        random.seed(model_info[SEED])
+        # Set 3 constant seeds for the training/validation split
+        data_seeds = [random.randint(0, 1000000) for j in range(len(ids))]
+        # Send the tasks
+        tasks = {}
+        for org_num, id in enumerate(ids):
+            input = {
+                "method": PREDICT,
+                "args": [],
+                    "kwargs": {
+                        "parameters": {
+                            ROUNDS: model_info[ROUND],
+                            HISTORY: parameters.get(HISTORY),
+                            MODEL_ID: parameters.get(MODEL_ID),
+                            DB_TYPE: parameters.get(DB_TYPE),
+                            IS_TRAINING_DATA: parameters.get(IS_TRAINING_DATA),
+                        },
+                        WEIGHTS: json.dumps(np_array_to_list(model_info[WEIGHTS])),
+                        DATA_SEED: data_seeds[org_num],
+                        SEED: data_seeds[org_num],
+                        DATA_SPLIT: 1 if int(parameters.get(DATA_SPLIT)) == 1 else model_info[DATA_SPLIT],
+                    }
+            }
+            task_id = execute_task(client, input, [id], algorithm_image)
+            tasks[task_id] = {
+                ORGANIZATION_ID: id
+            }
+        output = get_result(
+            client,
+            tasks,
+            max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES,
+            sleep_time=parameters.get(SLEEP_TIME) or DEFAULT_SLEEP_TIME,
+        )
+        return {
+            PREDICT: [{
                 ORGANIZATION_ID: tasks[key],
                 RESULT: result,
                 } for key, result in output.items()]
@@ -149,6 +244,7 @@ def master(client, db_client, parameters = None):
             SEED: None,
             ROUND: 0,
             WEIGHTS: None,
+            DATA_SPLIT: None,
         }
         store_model = SAVE_MODEL in parameters and parameters[SAVE_MODEL]
         run_id = None
@@ -161,6 +257,7 @@ def master(client, db_client, parameters = None):
                     if result:
                         info("Get existing model")
                         model_info[SEED] = result[2]
+                        model_info[DATA_SPLIT] = result[3]
                         last_run = get_last_run_by_id(parameters[MODEL_ID], db_client)
                         if last_run:
                             run_id = last_run[0]
@@ -170,8 +267,9 @@ def master(client, db_client, parameters = None):
                         # Insert a new entry for the model
                         info("Insert the new model")
                         model_info[SEED] = parameters.get(SEED) if \
-                            parameters.get(SEED) is not None else random.randint(0, 10000)
-                        insert_model(model_info[ID], model_info[SEED], db_client)
+                            parameters.get(SEED) is not None else random.randint(0, 1000000)
+                        model_info[DATA_SPLIT] = parameters[MODEL][DATA_SPLIT]
+                        insert_model(model_info[ID], model_info[SEED], model_info[DATA_SPLIT], db_client)
                 except Exception as error:
                     error_message = f"Unable to connect to the database and retrieve the model: {str(error)}"
                     warn(error_message)
@@ -188,7 +286,8 @@ def master(client, db_client, parameters = None):
         # Set the seed value
         info(f"Using {model_info[SEED]} as the seed")
         random.seed(model_info[SEED])
-
+        # Set 3 constant seeds for the training/validation split
+        data_seeds = [random.randint(0, 1000000) for j in range(len(ids))]
         # Intialize the model
         learning_rate = parameters.get(LEARNING_RATE, 1)
         model_parameters = dict(DEFAULT_HYPERPARAMETERS)
@@ -203,7 +302,9 @@ def master(client, db_client, parameters = None):
         # Execute the training
         for i in range(int(model_info[ROUND]), parameters[MODEL][MASTER][ROUNDS]):
             info(f"Round {i}/{parameters[MODEL][MASTER][ROUNDS]}")
-            seeds = [random.randint(0, 10000) for j in range(len(ids))]
+            # Set 3 random seeds each round to have a different random shuffle 
+            # in each round for the batch split
+            seeds = [random.randint(0, 1000000) for j in range(len(ids))]
             tasks = {}
             # Store the model if requested. If the weigths were previously store,
             # it'll skip for the first round
@@ -235,11 +336,12 @@ def master(client, db_client, parameters = None):
                             DB_TYPE: parameters.get(DB_TYPE)
                         },
                         WEIGHTS: json.dumps(np_array_to_list(brain_age_weights)),
+                        DATA_SEED: data_seeds[org_num],
                         SEED: seeds[org_num],
-                        DATA_SPLIT: parameters[MODEL][DATA_SPLIT],
+                        DATA_SPLIT: model_info[DATA_SPLIT],
                     }
                 }
-                task_id = execute_task(client, input, [org_id])
+                task_id = execute_task(client, input, [org_id], algorithm_image)
                 tasks[task_id] = {
                     ORGANIZATION_ID: org_id
                 }
@@ -257,7 +359,6 @@ def master(client, db_client, parameters = None):
             if errors:
                 warn("Encountered an error, please review the parameters")
                 return { ERROR: errors }
-
             info("Aggregating the results")
             metrics = {
                 GLOBAL: {}
@@ -265,8 +366,16 @@ def master(client, db_client, parameters = None):
             metrics_aggregator = {
                 MAE: [],
                 MSE: [],
+                VAL_MAE: [],
+                VAL_MSE: [],
             }
-            sample_size = [result[SAMPLES] for result in output_data]
+            predictions = {}
+            sample_size_training = [result[SAMPLE_SIZE][0] for result in output_data]
+            sample_size_validation = [result[SAMPLE_SIZE][1] for result in output_data]
+            info(
+                "Total number of samples for training and validation: " + 
+                    f"{sum(sample_size_training)}, {sum(sample_size_validation)}"
+            )
             # Collect the metrics by organization
             for task_id, result in output.items():
                 metrics[task_id] = {
@@ -275,10 +384,23 @@ def master(client, db_client, parameters = None):
                     METRICS: result[METRICS],
                     SAMPLE_SIZE: result[SAMPLE_SIZE]
                 }
+                predictions[tasks[task_id][ORGANIZATION_ID]] = result[PREDICTIONS]
                 for metric in metrics_aggregator.keys():
-                    metrics_aggregator[metric].append(result[METRICS][metric][0])
+                    if metric in result[METRICS] and len(result[METRICS][metric]) > 0:
+                        metrics_aggregator[metric].append(result[METRICS][metric][0])
+                    else:
+                        warn(
+                            f"Metric {metric} not found in the results from the node with " +
+                                f"id {metrics[task_id][ORGANIZATION_ID]}"
+                        )
             for metric in metrics_aggregator.keys():
-                metrics[GLOBAL][metric] = np.average(metrics_aggregator[metric], weights=sample_size)
+                weights = sample_size_training
+                if 'val' in metric:
+                    weights = sample_size_validation
+                if len(metrics_aggregator[metric]) > 0 and sum(weights) > 0:
+                    metrics[GLOBAL][metric] = np.average(metrics_aggregator[metric], weights=weights)
+                else:
+                    metrics[GLOBAL][metric] = -1
             results[METRICS][i] = metrics
             # Store the results
             if store_model:
@@ -288,40 +410,50 @@ def master(client, db_client, parameters = None):
                         ERROR: "Error: missing run_id!"
                     }
                 # Update the model with the metrics
+                info("Update the model")
                 update_run(
                     model_info[ID],
                     run_id,
                     metrics[GLOBAL][MAE],
                     metrics[GLOBAL][MSE],
-                    json.dumps(np_array_to_list(metrics)),
+                    metrics[GLOBAL][VAL_MAE],
+                    metrics[GLOBAL][VAL_MSE],
+                    json.dumps(metrics),
+                    json.dumps(predictions),
                     db_client
                 )
             # Update the model weights
-            total_samples = sum(sample_size)
+            total_training_samples = sum(sample_size_training)
             brain_age_weights_update = []
             models_parsed = []
             for result in output_data:
                 models_parsed.append({
                     WEIGHTS: json.loads(result[WEIGHTS]),
-                    SAMPLES: result[SAMPLES]
+                    SAMPLE_SIZE: result[SAMPLE_SIZE][0]
                 })
             for j in range(0, len(models_parsed[0][WEIGHTS])):
                 brain_age_weights_update.append(
                     tf.math.reduce_sum([
-                        np.array(result[WEIGHTS][j], dtype=np.double) * result[SAMPLES] / total_samples for result in models_parsed
+                        np.array(result[WEIGHTS][j], dtype=np.double) * result[SAMPLE_SIZE] / total_training_samples for result in models_parsed
                     ], axis=0)
                 )
             brain_age_weights = brain_age_weights * (1 - learning_rate) + brain_age_weights_update * learning_rate
-        results[WEIGHTS] = brain_age_weights
+        # Store the model from the last round
+        if store_model and int(model_info[ROUND]) < parameters[MODEL][MASTER][ROUNDS]:
+            info("Save last merged model")
+            result = insert_run(
+                model_info[ID],
+                parameters[MODEL][MASTER][ROUNDS],
+                json.dumps(np_array_to_list(brain_age_weights)),
+                None,
+                None,
+                None,
+                db_client
+            )
+        if parameters.get(RETURN_WEIGTHS):
+            results[WEIGHTS] = brain_age_weights
+        info("Send the output")
         return results
-    elif parameters[TASK] == PREDICT:
-        input_ = {
-            "method": "predict",
-            "args": [],
-            "kwargs": {
-                "parameters": parameters,
-            }
-        }
 
     # info("Check if any exception occurred")
     # if any([ERROR in result for result in results]):
@@ -336,7 +468,7 @@ def master(client, db_client, parameters = None):
 
     return output
 
-def RPC_check(db_client, parameters):
+def RPC_check(db_client, parameters, org_ids = None):
     """
     Check the status of the different components:
     - Cluster by successfully running this task;
@@ -357,7 +489,7 @@ def RPC_check(db_client, parameters):
     # Check the number of scans actually available
     output[IMAGES_FOLDER] = {}
     images_path = os.getenv(IMAGES_FOLDER)
-    if os.getenv(images_path) and os.path.isdir(images_path):
+    if images_path and os.path.isdir(images_path):
         scans = [f for f in os.path.listdir(images_path) if os.path.isfile(os.path.join(images_path, f))]
         output[IMAGES_FOLDER][NUMBER_SCANS] = len(scans)
         # missing = []
@@ -395,7 +527,7 @@ def RPC_check(db_client, parameters):
     output[GPU_COUNT] = len(tf.config.list_physical_devices('GPU'))
     return output
 
-def RPC_brain_age(db_client, parameters, weights, seed, data_split):
+def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
     """
     Run the CNN to compute the brain age
 
@@ -411,10 +543,11 @@ def RPC_brain_age(db_client, parameters, weights, seed, data_split):
     Dict
         A Dict containing the CNN weights.
     """
-    info("Brain age CNN - Node method")
+    info("Brain age CNN - Node method - Training")
     output = {
         METRICS: {},
         HISTORY: {},
+        PREDICTIONS: {},
     }
     # Retrieve the data from XNAT if necessary
     # data_path = os.path.join(os.getenv(DATA_FOLDER), parameters[MODEL_ID])
@@ -428,6 +561,98 @@ def RPC_brain_age(db_client, parameters, weights, seed, data_split):
     #         return {
     #             ERROR: ""
     #         }
+    #try:
+    # Initialize the model
+    brain_age = BrainAge(
+        parameters,
+        parameters[MODEL_ID],
+        os.getenv(IMAGES_FOLDER),
+        parameters[DB_TYPE],
+        db_client if parameters[DB_TYPE] != DB_CSV else os.getenv(DATA_FOLDER) + "/dataset.csv",
+        # parameters[TRAINING_IDS],
+        # parameters[VALIDATION_IDS],
+        seed=data_seed,
+        split=data_split,
+    )
+    participants_by_subset = {
+        TRAIN: brain_age.train_loader.participant_list,
+        VALIDATION: brain_age.train_loader.participant_list,
+    }
+    for subset, subset_participants in participants_by_subset.items():
+        if len(subset_participants[1]) > 0:
+            warn(f"{len(subset_participants[1])} of {subset} participants with incomplete " +
+                + "information: {', '.join(subset_participants[1])}")
+        if len(subset_participants[2]) > 0:
+            warn(f"{len(subset_participants[2])} of {subset} participants without imaging " +
+                f"data available: {', '.join(subset_participants[2])}")
+    output[SAMPLE_SIZE] = [
+        len(brain_age.train_loader.participants), len(brain_age.validation_loader.participants)
+    ]
+    if len(brain_age.train_loader.participants) > 0:
+        if weights:
+            # Set the initial weights if available
+            parsed_weights = [
+                np.array(weights_by_layer, dtype=np.double) for weights_by_layer in json.loads(weights)
+            ]
+            brain_age.model.set_weights(parsed_weights)
+        info("Predictions with the aggregated network")
+        output[PREDICTIONS] = brain_age.predict()
+        metrics = [
+            brain_age.get_metrics(
+                brain_age.train_loader,
+                list(output[PREDICTIONS][TRAIN].values()),
+            ),
+            brain_age.get_metrics(
+                brain_age.validation_loader,
+                list(output[PREDICTIONS][VALIDATION].values()),
+                prefix="val_",
+            ),
+        ]
+        info("Training the network")
+        # Set the random seed
+        random.seed(seed)
+        # Train the model
+        result = brain_age.train()
+        # Retrieve the weights, metrics for the first and last epoch, and the 
+        # history if requested
+        info("Retrieve the results")
+        output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.model.get_weights()))
+        local_predictions = brain_age.predict()
+        metrics.extend([
+            brain_age.get_metrics(
+                brain_age.train_loader,
+                list(local_predictions[TRAIN].values()),
+            ),
+            brain_age.get_metrics(
+                brain_age.validation_loader,
+                list(local_predictions[VALIDATION].values()),
+                prefix="val_",
+            ),
+        ])
+        output[METRICS] = {
+            key: [metric[key] for metric in metrics if key in metric] for key in [MAE, MSE, VAL_MAE, VAL_MSE]
+        }
+        # Metrics from the augmented data
+        # for metric in result.history.keys():
+        #     output[METRICS][metric] = [result.history[metric][0], result.history[metric][-1]]
+        if parameters.get(HISTORY):
+            output[HISTORY] = result.history
+    else:
+        raise Exception("No participants found for the training set")
+    #except Exception as error:
+    #    message = f"Error while training the model: {str(error)}"
+    #    warn(message)
+    #    output[ERROR] = message
+    return output
+
+def RPC_predict(db_client, parameters, weights, data_seed, seed, data_split):
+    """ Predict the brain age
+    """
+    info("Brain age CNN - Node method - Prediction")
+    output = {
+        PREDICTIONS: {},
+        METRICS: {},
+    }
     try:
         # Initialize the model
         brain_age = BrainAge(
@@ -438,29 +663,73 @@ def RPC_brain_age(db_client, parameters, weights, seed, data_split):
             db_client if parameters[DB_TYPE] != DB_CSV else os.getenv(DATA_FOLDER) + "/dataset.csv",
             # parameters[TRAINING_IDS],
             # parameters[VALIDATION_IDS],
-            seed=seed,
+            seed=data_seed,
             split=data_split,
         )
-        output[SAMPLE_SIZE] = [
-            len(brain_age.train_loader.participants), len(brain_age.validation_loader.participants)
-        ]
-        if len(brain_age.train_loader.participants) > 0:
-            if weights:
-                # Set the initial weights if available
-                parsed_weights = [
-                    np.array(weights_by_layer, dtype=np.double) for weights_by_layer in json.loads(weights)
+        participants_by_subset = {
+            TRAIN: brain_age.train_loader.participant_list,
+            VALIDATION: brain_age.train_loader.participant_list,
+        }
+        for subset, subset_participants in participants_by_subset.items():
+            if len(subset_participants[1]) > 0:
+                warn(f"{len(subset_participants[1])} of {subset} participants with incomplete \
+                    information: {', '.join(subset_participants[1])}")
+            if len(subset_participants[2]) > 0:
+                warn(f"{len(subset_participants[2])} of {subset} participants without imaging '\
+                    data available: {', '.join(subset_participants[2])}")
+        if weights:
+            # Set the initial weights if available
+            parsed_weights = [
+                np.array(weights_by_layer, dtype=np.double) for weights_by_layer in json.loads(weights)
+            ]
+            brain_age.model.set_weights(parsed_weights)
+        # Predict
+        info("Predict")
+        data_loader = None
+        # More generically it could be a "Dataset" field
+        if IS_TRAINING_DATA in parameters and not parameters[IS_TRAINING_DATA]:
+            data_loader = DataLoader(
+                brain_age.images_path,
+                parameters[DB_TYPE],
+                db_client if parameters[DB_TYPE] != DB_CSV else os.getenv(DATA_FOLDER) + "/dataset.csv",
+                training=False,
+                validation=False,
+                seed=data_seed,
+                split=1,
+            )
+            output[DATASET] = [TEST]
+            output[SAMPLE_SIZE] = len(data_loader.participants)
+            if data_loader and len(data_loader.participants) > 0:
+                output[PREDICTIONS] = brain_age.predict({
+                    TEST: data_loader
+                })
+                output[METRICS] = [
+                    brain_age.get_metrics(
+                        data_loader,
+                        list(output[PREDICTIONS][TEST].values()),
+                    ),
                 ]
-                brain_age.model.set_weights(parsed_weights)
-            output[SAMPLES] = 1
-            # Train the model
-            result = brain_age.train()
-            # Retrieve the weights, metrics for the first and last epoch, and the 
-            # history if requested
-            output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.model.get_weights()))
-            for metric in result.history.keys():
-                output[METRICS][metric] = [result.history[metric][0], result.history[metric][-1]]
-            if parameters.get(HISTORY):
-                output[HISTORY] = result.history
+            else:
+                raise Exception("No participants found for the prediction dataset requested")
+        else:
+            output[DATASET] = [TRAIN, VALIDATION]
+            output[SAMPLE_SIZE] = [
+                len(brain_age.train_loader.participants), len(brain_age.validation_loader.participants)
+            ]
+            output[PREDICTIONS] = brain_age.predict()
+            output[METRICS] = [
+                brain_age.get_metrics(
+                    brain_age.train_loader,
+                    list(output[PREDICTIONS][TRAIN].values()),
+                ),
+                brain_age.get_metrics(
+                    brain_age.validation_loader,
+                    list(output[PREDICTIONS][VALIDATION].values()),
+                    prefix="val_",
+                ),
+            ]
     except Exception as error:
-        output[ERROR] = f"Error while training the model: {str(error)}"
+        message = f"Error while predicting: {str(error)}"
+        warn(message)
+        output[ERROR] = message
     return output
