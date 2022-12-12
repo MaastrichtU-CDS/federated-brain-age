@@ -1,4 +1,6 @@
+# Test the brain age algorithm
 import os
+import random
 
 import tensorflow as tf
 
@@ -7,37 +9,36 @@ from federated_brain_age.data_loader import DataLoader
 
 data_path = "/mnt"
 
-# training = DataLoader(
-#     data_path,
-#     "CSV",
-#     data_path,
-#     ["1002822", "1001009"]
-# )
-
-# validation =  DataLoader(
-#     data_path,
-#     "CSV",
-#     data_path,
-#     ["1000049"]
-# )
-
 parameters = {
     "USE_MASK": True,
-    "EPOCHS": 1,
+    "EPOCHS": 2,
+    "PATIENTS_PER_EPOCH": 2,
+    "ROUNDS": 1,
 }
-#model = BrainAge(parameters, "test", data_path + "/data/", "CSV", data_path + "/clinical_data.csv", ["1002822", "1001009"], ["1000049"])
-model = BrainAge(parameters, "test", data_path + "/data/", "CSV", data_path + "/dataset.csv", ["2a", "3a"], ["4a"])
-model.train()
 
-file = model.model.to_json()
+seed = 1
+
+model = BrainAge(parameters, "test", data_path + "/data/", "CSV", data_path + "/dataset.csv", seed, 0.7)
+
+result = model.train()
 
 
-# Rplacing the weights
-# weights = model.model.get_weights()
-# weights_copy = model.model.get_weights()
-# ww = []
-# for i in range(0, len(weights)):
-#     ww.append(tf.reduce_mean([w[i] for w in [weights, weights_copy]], axis=0))
-# model2 = BrainAge(parameters, "test", data_path + "/data/", "CSV", data_path + "/dataset.csv", ["2a", "3a"], ["4a"])
-# model2.model.set_weights(ww)
-# model2.train()
+# img_size = model.initialize()
+# batch_size = len(model.train_loader.participants)
+# img_scale = model.get_parameter("IMG_SCALE")
+# predictions = model.model.predict(
+#     model.train_loader.data_generator(
+#         img_size, 2, img_scale, mask=model.mask, augment=False, mode=[], shuffle=False, crop=model.crop
+#     ),
+#     max_queue_size = 1,
+#     batch_size=2,
+#     steps=1
+# )
+# print("Predictions")
+# print(predictions)
+
+# dict_keys(['loss', 'mae', 'mse', 'val_loss', 'val_mae', 'val_mse'])
+output = {}
+for metric in result.history.keys():
+    output[metric] = result.history[metric][-1]
+print(output)
