@@ -84,7 +84,8 @@ class BrainAge:
             f"{prefix}{MSE}": -1,
         }
         if len(loader.participants) > 0:
-            y_true = list(loader.clinical_data.loc[loader.participants, AGE].values)
+            ages = loader.clinical_data.loc[loader.participants, AGE].values
+            y_true = list(ages.astype(float))
             metrics = {
                 f"{prefix}{MAE}": float(keras.metrics.mean_absolute_error(y_true, y_pred)),
                 f"{prefix}{MSE}": float(keras.metrics.mean_squared_error(y_true, y_pred)),
@@ -197,7 +198,13 @@ class BrainAge:
         """
         with open(f"{os.getenv(MODEL_FOLDER)}/{self.id}/model.json", 'w') as json_file:
             json_file.write(self.model.to_json())
-        ModelCheckpoint(f"{os.getenv(MODEL_FOLDER)}/{self.id}/model.h5", monitor='val_loss', verbose=0, save_best_only=True, mode='auto')
+        return ModelCheckpoint(
+            f"{os.getenv(MODEL_FOLDER)}/{self.id}/model.h5",
+            monitor='val_loss',
+            verbose=0,
+            save_best_only=True,
+            mode='auto'
+        )
 
     def load_model(self):
         """ Load the CNN model from a previous session.
@@ -241,7 +248,6 @@ class BrainAge:
             validation_steps = validation_steps,
             max_queue_size = 1,
             callbacks = callbacks
-            #callbacks=[history, checkpoint, stoptraining]
         )
 
     def predict(self, data_loader = None):

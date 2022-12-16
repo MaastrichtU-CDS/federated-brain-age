@@ -21,9 +21,17 @@ class DataLoader:
         else:
             raise Exception("Missing the database type variable.")
 
-        self.clinical_data = pd.DataFrame(data, columns = [ID, CLINICAL_ID, IMAGING_ID, AGE, SEX, IS_TRAINING_DATA])
+        self.clinical_data = pd.DataFrame(
+            data,
+            columns = [ID, CLINICAL_ID, IMAGING_ID, AGE, SEX, IS_TRAINING_DATA],
+            dtype=str
+        )
         self.clinical_data = self.clinical_data.set_index(ID)
-        self.participant_list = self.validate_participants(list(data[ID]), training, validation)
+        self.participant_list = self.validate_participants(
+            list([str(id) for id in data[ID]]),
+            training,
+            validation
+        )
         # Set the seed
         random.seed(self.seed)
         # Make the data split
@@ -53,7 +61,7 @@ class DataLoader:
                 patient_info = self.clinical_data.loc[str(participant)]
                 # The flag 'IS_TRAINING_DATA' identifies the data that will be used for
                 # training and thus splitted between training and validation.
-                if (training or validation) == patient_info[IS_TRAINING_DATA]:
+                if (training or validation) == int(patient_info[IS_TRAINING_DATA]):
                     patient_filename = str(patient_info[IMAGING_ID]).strip() + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
                     if os.path.exists(os.path.join(self.images_path, patient_filename)):
                         participants_list[0].append(participant)
@@ -115,7 +123,7 @@ class DataLoader:
         if img_scale < 1.0:
             img_data = resize_img(img_data, img_size)
         
-        return np.array(img_data), np.array(int(input2)), label
+        return np.array(img_data), np.array(int(input2)), float(label)
 
     def generate_batch(self, patients, img_size, img_scale=1.0, mask=None, mode=[], crop=None):
         """
