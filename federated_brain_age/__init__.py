@@ -561,88 +561,88 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
     #         return {
     #             ERROR: ""
     #         }
-    #try:
-    # Initialize the model
-    brain_age = BrainAge(
-        parameters,
-        parameters[MODEL_ID],
-        os.getenv(IMAGES_FOLDER),
-        parameters[DB_TYPE],
-        db_client if parameters[DB_TYPE] != DB_CSV else os.getenv(DATA_FOLDER) + "/dataset.csv",
-        # parameters[TRAINING_IDS],
-        # parameters[VALIDATION_IDS],
-        seed=data_seed,
-        split=data_split,
-    )
-    participants_by_subset = {
-        TRAIN: brain_age.train_loader.participant_list,
-        VALIDATION: brain_age.train_loader.participant_list,
-    }
-    for subset, subset_participants in participants_by_subset.items():
-        if len(subset_participants[1]) > 0:
-            warn(f"{len(subset_participants[1])} of {subset} participants with incomplete " +
-                + "information: {', '.join(subset_participants[1])}")
-        if len(subset_participants[2]) > 0:
-            warn(f"{len(subset_participants[2])} of {subset} participants without imaging " +
-                f"data available: {', '.join(subset_participants[2])}")
-    output[SAMPLE_SIZE] = [
-        len(brain_age.train_loader.participants), len(brain_age.validation_loader.participants)
-    ]
-    if len(brain_age.train_loader.participants) > 0:
-        if weights:
-            # Set the initial weights if available
-            parsed_weights = [
-                np.array(weights_by_layer, dtype=np.double) for weights_by_layer in json.loads(weights)
-            ]
-            brain_age.model.set_weights(parsed_weights)
-        info("Predictions with the aggregated network")
-        output[PREDICTIONS] = brain_age.predict()
-        metrics = [
-            brain_age.get_metrics(
-                brain_age.train_loader,
-                list(output[PREDICTIONS][TRAIN].values()),
-            ),
-            brain_age.get_metrics(
-                brain_age.validation_loader,
-                list(output[PREDICTIONS][VALIDATION].values()),
-                prefix="val_",
-            ),
-        ]
-        info("Training the network")
-        # Set the random seed
-        random.seed(seed)
-        # Train the model
-        result = brain_age.train()
-        # Retrieve the weights, metrics for the first and last epoch, and the 
-        # history if requested
-        info("Retrieve the results")
-        output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.model.get_weights()))
-        local_predictions = brain_age.predict()
-        metrics.extend([
-            brain_age.get_metrics(
-                brain_age.train_loader,
-                list(local_predictions[TRAIN].values()),
-            ),
-            brain_age.get_metrics(
-                brain_age.validation_loader,
-                list(local_predictions[VALIDATION].values()),
-                prefix="val_",
-            ),
-        ])
-        output[METRICS] = {
-            key: [metric[key] for metric in metrics if key in metric] for key in [MAE, MSE, VAL_MAE, VAL_MSE]
+    try:
+        # Initialize the model
+        brain_age = BrainAge(
+            parameters,
+            parameters[MODEL_ID],
+            os.getenv(IMAGES_FOLDER),
+            parameters[DB_TYPE],
+            db_client if parameters[DB_TYPE] != DB_CSV else os.getenv(DATA_FOLDER) + "/dataset.csv",
+            # parameters[TRAINING_IDS],
+            # parameters[VALIDATION_IDS],
+            seed=data_seed,
+            split=data_split,
+        )
+        participants_by_subset = {
+            TRAIN: brain_age.train_loader.participant_list,
+            VALIDATION: brain_age.train_loader.participant_list,
         }
-        # Metrics from the augmented data
-        # for metric in result.history.keys():
-        #     output[METRICS][metric] = [result.history[metric][0], result.history[metric][-1]]
-        if parameters.get(HISTORY):
-            output[HISTORY] = result.history
-    else:
-        raise Exception("No participants found for the training set")
-    #except Exception as error:
-    #    message = f"Error while training the model: {str(error)}"
-    #    warn(message)
-    #    output[ERROR] = message
+        for subset, subset_participants in participants_by_subset.items():
+            if len(subset_participants[1]) > 0:
+                warn(f"{str(len(subset_participants[1]))} of {subset} participants with incomplete " +
+                    f"information: {', '.join([str(participant) for participant in subset_participants[1]])}")
+            if len(subset_participants[2]) > 0:
+                warn(f"{str(len(subset_participants[2]))} of {subset} participants without imaging " +
+                    f"data available: {', '.join([str(participant) for participant in subset_participants[2]])}")
+        output[SAMPLE_SIZE] = [
+            len(brain_age.train_loader.participants), len(brain_age.validation_loader.participants)
+        ]
+        if len(brain_age.train_loader.participants) > 0:
+            if weights:
+                # Set the initial weights if available
+                parsed_weights = [
+                    np.array(weights_by_layer, dtype=np.double) for weights_by_layer in json.loads(weights)
+                ]
+                brain_age.model.set_weights(parsed_weights)
+            info("Predictions with the aggregated network")
+            output[PREDICTIONS] = brain_age.predict()
+            metrics = [
+                brain_age.get_metrics(
+                    brain_age.train_loader,
+                    list(output[PREDICTIONS][TRAIN].values()),
+                ),
+                brain_age.get_metrics(
+                    brain_age.validation_loader,
+                    list(output[PREDICTIONS][VALIDATION].values()),
+                    prefix="val_",
+                ),
+            ]
+            info("Training the network")
+            # Set the random seed
+            random.seed(seed)
+            # Train the model
+            result = brain_age.train()
+            # Retrieve the weights, metrics for the first and last epoch, and the 
+            # history if requested
+            info("Retrieve the results")
+            output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.model.get_weights()))
+            local_predictions = brain_age.predict()
+            metrics.extend([
+                brain_age.get_metrics(
+                    brain_age.train_loader,
+                    list(local_predictions[TRAIN].values()),
+                ),
+                brain_age.get_metrics(
+                    brain_age.validation_loader,
+                    list(local_predictions[VALIDATION].values()),
+                    prefix="val_",
+                ),
+            ])
+            output[METRICS] = {
+                key: [metric[key] for metric in metrics if key in metric] for key in [MAE, MSE, VAL_MAE, VAL_MSE]
+            }
+            # Metrics from the augmented data
+            # for metric in result.history.keys():
+            #     output[METRICS][metric] = [result.history[metric][0], result.history[metric][-1]]
+            if parameters.get(HISTORY):
+                output[HISTORY] = result.history
+        else:
+            raise Exception("No participants found for the training set")
+    except Exception as error:
+       message = f"Error while training the model: {str(error)}"
+       warn(message)
+       output[ERROR] = message
     return output
 
 def RPC_predict(db_client, parameters, weights, data_seed, seed, data_split):
