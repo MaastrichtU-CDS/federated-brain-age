@@ -99,8 +99,8 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
     if parameters[TASK] == CHECK:
         # Validate the input
         missing_parameters = validate_parameters(parameters, {DB_TYPE: {}})
-        if missing_parameters:
-            parse_error(
+        if len(missing_parameters) > 0:
+            return parse_error(
                 f"Missing the following parameters: {', '.join(missing_parameters)}"
             )
         # Send the tasks
@@ -140,8 +140,8 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
             DB_TYPE: {},
             MODEL_ID: {}
         })
-        if missing_parameters:
-            parse_error(
+        if len(missing_parameters) > 0:
+            return parse_error(
                 f"Missing the following parameters: {', '.join(missing_parameters)}"
             )
         # Retrieve the necessary data from the database
@@ -503,7 +503,7 @@ def RPC_check(db_client, parameters, org_ids = None):
 
     # Check if the clinical data is available
     if parameters[DB_TYPE] == DB_CSV:
-        output[DB_CSV] = os.path.isfile(os.getenv(DATA_FOLDER) + "/dataset.csv")
+        output[DB_CSV] = os.path.isfile(os.getenv(DATA_FOLDER) or "" + "/dataset.csv")
     elif parameters[DB_TYPE] == DB_POSTGRES:
         output[DB_POSTGRES] = False
         #if os.getenv(DB_CNN_DATABASE):
