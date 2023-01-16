@@ -14,6 +14,7 @@ from federated_brain_age.callbacks import DecayingLRSchedule
 from federated_brain_age.constants import *
 from federated_brain_age.data_loader import DataLoader
 from federated_brain_age.image_processing import imgZeropad
+from federated_brain_age.loss_history import LossHistory
 
 DEFAULT_HYPERPARAMETERS = {
     INPUT_SHAPE: (160, 192, 144, 1),
@@ -47,6 +48,7 @@ class BrainAge:
         self.id = id
         self.mask = None
         self.crop = None
+        self.history = None
         self.images_path = images_path
         self.train_loader = DataLoader(
             images_path,
@@ -212,7 +214,7 @@ class BrainAge:
         self.model = keras.models.load_model(f"{os.getenv(MODEL_FOLDER)}/{self.id}/model.h5")
         self.model.summary()
 
-    def train(self):
+    def train(self, history=False):
         """ Train the CNN model.
         """
         model_version=f"BrainAge_{self.id}"
@@ -226,6 +228,9 @@ class BrainAge:
         if self.get_parameter(EARLY_STOPPING):
             stoptraining = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=0, mode='min')
             callbacks.append(stoptraining)
+        if history:
+            self.history = LossHistory(self)
+            callbacks.append(self.history)
         # Calculate the training steps
         patients_per_epoch = min(self.get_parameter(PATIENTS_PER_EPOCH), len(self.train_loader.participants))
         steps_per_epoch = int(math.ceil(float(patients_per_epoch)/batch_size))
