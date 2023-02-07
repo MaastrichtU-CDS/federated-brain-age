@@ -21,34 +21,25 @@ class LossHistory(keras.callbacks.Callback):
         # self.epoch_losses = []
         self.epoch_mae = []
         self.epoch_mse = []
-        # self.my_epoch_mae = []
-        # self.my_epoch_mse = []
+        self.val_epoch_mae = []
+        self.val_epoch_mse = []
         
         print('Start training ...')
         
         self.stats = ['mae', 'mse']
-        # self.logs = [{} for _ in range(self.ne)]
 
     def on_epoch_end(self, epoch, logs={}):
-        # self.epoch_losses.append(logs.get('loss'))
-        # print("Train")
-        # print(f"{logs.get('mae')} {logs.get('mse')}")
-        # self.epoch_mae.append(logs.get('mae'))
-        # self.epoch_mse.append(logs.get('mse'))
-
         local_predictions = self.model_class.predict()
         metrics_epoch = self.model_class.get_metrics(
             self.model_class.train_loader,
             list(local_predictions[TRAIN].values()),
         )
-        # print("Train ours")
-        # print(f"{met['mae']} {met['mse']}")
         self.epoch_mae.append(metrics_epoch['mae'])
         self.epoch_mse.append(metrics_epoch['mse'])
         print(self.epoch_mae)
         print(self.epoch_mse)
-        # print("Validation")
-        # print(f"{logs.get('val_mae')} {logs.get('val_mse')}")
+        self.epoch_mae.append(logs.get('val_mae'))
+        self.epoch_mse.append(logs.get('val_mse'))
 
         # Model Selection
         if self.best_mae is None or self.best_mae > logs.get('val_mae'):
@@ -59,9 +50,9 @@ class LossHistory(keras.callbacks.Callback):
     def on_train_end(self, logs=None):
         print(self.epoch_mae)
         print(self.epoch_mse)
+        print(self.val_epoch_mae)
+        print(self.val_epoch_mse)
         print(f"Best model at epoch {self.best_epoch} with a MAE of {self.best_mae}")
-        # print(self.my_epoch_mae)
-        # print(self.my_epoch_mse)
         print("Stop training")
 
 # # Track history

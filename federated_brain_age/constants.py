@@ -42,6 +42,8 @@ TRAIN = "train"
 VALIDATION = "validation"
 TEST = "test"
 PREDICT = "predict"
+GET_MODEL = "get_model"
+
 PREDICTIONS = "predictions"
 MODEL_ID = "MODEL_ID"
 SAVE_MODEL = "SAVE_MODEL"
