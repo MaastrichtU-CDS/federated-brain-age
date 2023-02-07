@@ -4,11 +4,11 @@ import numpy as np
 import os
 from federated_brain_age.utils import get_parameter
 
+from tensorflow import math
 from tensorflow import keras
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
-from tensorflow.keras.layers import Dense, Activation, Conv3D, MaxPooling3D, BatchNormalization, Dropout, GlobalAveragePooling3D
-from tensorflow.keras.layers import Input, concatenate
+from tensorflow.keras.layers import Dense, Activation, Conv3D, MaxPooling3D, BatchNormalization, Dropout, GlobalAveragePooling3D, Input, concatenate
 
 from federated_brain_age.callbacks import DecayingLRSchedule
 from federated_brain_age.constants import *
@@ -146,9 +146,14 @@ class BrainAge:
         y1 = concatenate([x1, input2]) # other modes: multiply, concatenate, dot
         
         y2 = Dropout(parameters(DROPOUT))(y1)
-        y2 = Dense(32, activation=RELU)(y2)
+        y2 = Dense(128, activation=RELU)(y2)
+        #y2 = Dropout(parameters(DROPOUT))(y2)
+        #y2 = Dense(16, activation=RELU)(y2)
+        final = Dense(64)(y2)
+        final = Activation('softmax')(final)
+        #final = math.argmax(final) + 30
 
-        final = Dense(1, activation='linear')(y2)
+        #final = Dense(1, activation='linear')(y2)
 
         model = Model(inputs=[input1, input2], outputs=final)
 
@@ -168,7 +173,9 @@ class BrainAge:
             #decay = parameters(DECAY),
         )
         model.compile(
-            loss='mean_squared_error',
+            #loss='mean_squared_error',
+            #loss='categorical_crossentropy',
+            loss=keras.losses.CategoricalCrossentropy(from_logits=False),
             optimizer=adam_opt,
             metrics=['mae', 'mse']
         )
@@ -255,6 +262,12 @@ class BrainAge:
             callbacks = callbacks
         )
 
+    @staticmethod
+    def calc_age(age_probability):
+        #idd = np.argsort(age_probability)[::-1]
+        idd = np.argsort(age_probability)[::-1][0:5]
+        return np.sum((idd + 25) * age_probability[idd])/np.sum(age_probability[idd])
+
     def predict(self, data_loader = None):
         """ Make the predictions for the data
         """
@@ -287,7 +300,15 @@ class BrainAge:
                     batch_size = self.get_parameter(BATCH_SIZE),
                     steps=int(math.ceil(float(len(loader.participants))/batch_size))
                 )
+                #predictions_by_participant[key] = dict(
+                #    zip(loader.participants, [float(p) for p in predictions.flatten()])
+                #)
+                # predictions_by_participant[key] = dict(
+                #     zip(loader.participants, [int(np.argmax(p)) + 25 for p in predictions])
+                # )
                 predictions_by_participant[key] = dict(
-                    zip(loader.participants, [float(p) for p in predictions.flatten()])
+                    zip(loader.participants, [
+                        self.calc_age(p) for p in predictions
+                    ])
                 )
         return predictions_by_participant

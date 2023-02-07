@@ -646,8 +646,10 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
                 output[HISTORY] = {
                     MAE: brain_age.history.epoch_mae,
                     MSE: brain_age.history.epoch_mse,
-                    VAL_MAE: result.history[VAL_MAE],
-                    VAL_MSE: result.history[VAL_MSE],
+                    #VAL_MAE: result.history[VAL_MAE],
+                    #VAL_MSE: result.history[VAL_MSE],
+                    VAL_MAE: brain_age.history.val_epoch_mae,
+                    VAL_MSE: brain_age.history.val_epoch_mse,
                 }
         else:
             raise Exception("No participants found for the training set")

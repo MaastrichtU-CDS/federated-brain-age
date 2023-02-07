@@ -98,7 +98,11 @@ class DataLoader:
         #     patient_info = validation_label_set.loc[patient_index]
         patient_info = self.clinical_data.loc[patient_index]
         # Get patient label (incident dementia or not)
-        label = patient_info.get(AGE)
+        # final = np.argmax(final) + 25
+        #label = patient_info.get(AGE)
+        label = np.ones((64)) * 0.0005
+        idd = int(patient_info.get(AGE)) - 25 if int(patient_info.get(AGE)) > 25 else 0
+        label[idd if idd < 64 else 63] = 0.9685
 
         # Get second input (sex)
         input2 = patient_info.get(SEX)    
@@ -123,7 +127,8 @@ class DataLoader:
         if img_scale < 1.0:
             img_data = resize_img(img_data, img_size)
         
-        return np.array(img_data), np.array(int(input2)), float(label)
+        #return np.array(img_data), np.array(int(input2)), float(label)
+        return np.array(img_data), np.array(int(input2)), label
 
     def generate_batch(self, patients, img_size, img_scale=1.0, mask=None, mode=[], crop=None):
         """

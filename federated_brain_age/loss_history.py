@@ -21,8 +21,8 @@ class LossHistory(keras.callbacks.Callback):
         # self.epoch_losses = []
         self.epoch_mae = []
         self.epoch_mse = []
-        # self.my_epoch_mae = []
-        # self.my_epoch_mse = []
+        self.val_epoch_mae = []
+        self.val_epoch_mse = []
         
         print('Start training ...')
         
@@ -45,8 +45,17 @@ class LossHistory(keras.callbacks.Callback):
         # print(f"{met['mae']} {met['mse']}")
         self.epoch_mae.append(metrics_epoch['mae'])
         self.epoch_mse.append(metrics_epoch['mse'])
-        print(self.epoch_mae)
-        print(self.epoch_mse)
+
+        metrics_epoch = self.model_class.get_metrics(
+            self.model_class.validation_loader,
+            list(local_predictions[VALIDATION].values()),
+        )
+        self.val_epoch_mae.append(metrics_epoch['mae'])
+        self.val_epoch_mse.append(metrics_epoch['mse'])
+        #self.val_epoch_mae.append(logs.get('val_mae'))
+        #self.val_epoch_mse.append(logs.get('val_mse'))
+        print(metrics_epoch['mae'])
+        print(metrics_epoch['mse'])
         # print("Validation")
         # print(f"{logs.get('val_mae')} {logs.get('val_mse')}")
 
@@ -59,6 +68,8 @@ class LossHistory(keras.callbacks.Callback):
     def on_train_end(self, logs=None):
         print(self.epoch_mae)
         print(self.epoch_mse)
+        print(self.val_epoch_mae)
+        print(self.val_epoch_mse)
         print(f"Best model at epoch {self.best_epoch} with a MAE of {self.best_mae}")
         # print(self.my_epoch_mae)
         # print(self.my_epoch_mse)
