@@ -665,28 +665,42 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
             info("Training the network")
             # Set the random seed
             random.seed(seed)
-            # Train the model
-            result = brain_age.train(history=parameters.get(HISTORY))
+            # Train the model - history is necessary for model selection
+            history = parameters.get(HISTORY) or parameters.get(MODEL_SELECTION)
+            result = brain_age.train(history=history)
             # Retrieve the weights, metrics for the first and last epoch, and the 
             # history if requested
             info("Retrieve the results")
-            if MODEL_SELECTION in parameters and parameters[MODEL_SELECTION] == VAL_MAE:
+            if history:
                 info("Model selection requested")
                 output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.history.best_model))
             else:
                 output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.model.get_weights()))
-            local_predictions = brain_age.predict()
-            metrics.extend([
-                brain_age.get_metrics(
-                    brain_age.train_loader,
-                    list(local_predictions[TRAIN].values()),
-                ),
-                brain_age.get_metrics(
-                    brain_age.validation_loader,
-                    list(local_predictions[VALIDATION].values()),
-                    prefix="val_",
-                ),
-            ])
+            # Calculate the metrics
+            if history:
+                metrics.extend([
+                    {
+                        MAE: brain_age.history.epoch_mae[-1],
+                        MSE: brain_age.history.epoch_mse[-1],
+                    },
+                    {
+                        VAL_MAE: brain_age.history.val_epoch_mae[-1],
+                        VAL_MSE: brain_age.history.val_epoch_mse[-1],
+                    },
+                ])
+            else:
+                local_predictions = brain_age.predict()
+                metrics.extend([
+                    brain_age.get_metrics(
+                        brain_age.train_loader,
+                        list(local_predictions[TRAIN].values()),
+                    ),
+                    brain_age.get_metrics(
+                        brain_age.validation_loader,
+                        list(local_predictions[VALIDATION].values()),
+                        prefix="val_",
+                    ),
+                ])
             output[METRICS] = {
                 key: [metric[key] for metric in metrics if key in metric] for key in [MAE, MSE, VAL_MAE, VAL_MSE]
             }
@@ -695,13 +709,13 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
             #     output[METRICS][metric] = [result.history[metric][0], result.history[metric][-1]]
             if parameters.get(HISTORY):
                 # Tensorflow history is an average of the results by batch
-                # except for the validation metrics
+                # except for the validation metrics (result.history[VAL_MSE])
                 # output[HISTORY] = result.history
                 output[HISTORY] = {
                     MAE: brain_age.history.epoch_mae,
                     MSE: brain_age.history.epoch_mse,
-                    VAL_MAE: result.history[VAL_MAE],
-                    VAL_MSE: result.history[VAL_MSE],
+                    VAL_MAE: brain_age.history.val_epoch_mae,
+                    VAL_MSE: brain_age.history.val_epoch_mse,
                 }
         else:
             raise Exception("No participants found for the training set")

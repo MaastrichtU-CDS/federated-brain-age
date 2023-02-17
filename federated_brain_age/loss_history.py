@@ -36,16 +36,17 @@ class LossHistory(keras.callbacks.Callback):
         )
         self.epoch_mae.append(metrics_epoch['mae'])
         self.epoch_mse.append(metrics_epoch['mse'])
-        print(self.epoch_mae)
-        print(self.epoch_mse)
-        self.epoch_mae.append(logs.get('val_mae'))
-        self.epoch_mse.append(logs.get('val_mse'))
+        print(f"Training MAE {metrics_epoch['mae']} MSE {metrics_epoch['mse']}")
+        self.val_epoch_mae.append(logs.get('val_mae'))
+        self.val_epoch_mse.append(logs.get('val_mse'))
 
         # Model Selection
         if self.best_mae is None or self.best_mae > logs.get('val_mae'):
             self.best_mae = logs.get('val_mae')
             self.best_epoch = epoch
             self.best_model = self.model.get_weights()
+            # TODO: Include an option to save the model
+            # self.model_class.save_model(suffix=f"-{str(epoch)}")
 
     def on_train_end(self, logs=None):
         print(self.epoch_mae)
