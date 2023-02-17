@@ -678,14 +678,15 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
                 output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.model.get_weights()))
             # Calculate the metrics
             if history:
+                epoch = brain_age.history.best_epoch if parameters.get(MODEL_SELECTION) else -1
                 metrics.extend([
                     {
-                        MAE: brain_age.history.epoch_mae[-1],
-                        MSE: brain_age.history.epoch_mse[-1],
+                        MAE: brain_age.history.epoch_mae[epoch],
+                        MSE: brain_age.history.epoch_mse[epoch],
                     },
                     {
-                        VAL_MAE: brain_age.history.val_epoch_mae[-1],
-                        VAL_MSE: brain_age.history.val_epoch_mse[-1],
+                        VAL_MAE: brain_age.history.val_epoch_mae[epoch],
+                        VAL_MSE: brain_age.history.val_epoch_mse[epoch],
                     },
                 ])
             else:
