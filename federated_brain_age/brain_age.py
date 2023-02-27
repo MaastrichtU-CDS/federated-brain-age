@@ -1,8 +1,8 @@
+import json
 import math
 import nibabel as nib
 import numpy as np
 import os
-from federated_brain_age.utils import get_parameter
 
 from tensorflow import keras
 from tensorflow.keras.models import Model
@@ -15,6 +15,7 @@ from federated_brain_age.constants import *
 from federated_brain_age.data_loader import DataLoader
 from federated_brain_age.image_processing import imgZeropad
 from federated_brain_age.loss_history import LossHistory
+from federated_brain_age.utils import np_array_to_list
 
 DEFAULT_HYPERPARAMETERS = {
     INPUT_SHAPE: (160, 192, 144, 1),
@@ -90,7 +91,9 @@ class BrainAge:
             y_true = list(ages.astype(float))
             metrics = {
                 f"{prefix}{MAE}": float(keras.metrics.mean_absolute_error(y_true, y_pred)),
+                f"{prefix}{SDAE}": float(np.std(np.absolute(np.subtract(y_true, y_pred)))),
                 f"{prefix}{MSE}": float(keras.metrics.mean_squared_error(y_true, y_pred)),
+                f"{prefix}{SDSE}": float(np.std(np.square(np.subtract(y_true, y_pred)))),
             }
         return metrics
 
@@ -195,11 +198,13 @@ class BrainAge:
             img_size = np.array(np.array(nib.load(self.images_path + os.listdir(self.images_path)[0]).get_data()).shape)
         return [int(math.ceil(img_d)) for img_d in img_size * self.get_parameter(IMG_SCALE)]
     
-    def save_model(self):
+    def save_model(self, suffix=""):
         """ Save the CNN model.
         """
-        with open(f"{os.getenv(MODEL_FOLDER)}/{self.id}/model.json", 'w') as json_file:
-            json_file.write(self.model.to_json())
+        #with open(f"{os.getenv(MODEL_FOLDER)}/{self.id}/model{suffix}.json", 'w') as json_file:
+        #    json_file.write(self.model.to_json())
+        with open(f"{os.getenv(MODEL_FOLDER)}/{self.id}/model{suffix}.json", 'w') as json_file:
+            json_file.write(json.dumps(np_array_to_list(self.model.get_weights())))
         return ModelCheckpoint(
             f"{os.getenv(MODEL_FOLDER)}/{self.id}/model.h5",
             monitor='val_loss',

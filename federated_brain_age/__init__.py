@@ -681,12 +681,16 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
                 epoch = brain_age.history.best_epoch if parameters.get(MODEL_SELECTION) else -1
                 metrics.extend([
                     {
-                        MAE: brain_age.history.epoch_mae[epoch],
-                        MSE: brain_age.history.epoch_mse[epoch],
+                        MAE: brain_age.history.train_metrics[MAE][epoch],
+                        MSE: brain_age.history.train_metrics[MSE][epoch],
+                        SDAE: brain_age.history.train_metrics[SDAE][epoch],
+                        SDSE: brain_age.history.train_metrics[SDSE][epoch],
                     },
                     {
-                        VAL_MAE: brain_age.history.val_epoch_mae[epoch],
-                        VAL_MSE: brain_age.history.val_epoch_mse[epoch],
+                        VAL_MAE: brain_age.history.val_metrics[MAE][epoch],
+                        VAL_MSE: brain_age.history.val_metrics[MSE][epoch],
+                        VAL_SDAE: brain_age.history.train_metrics[SDAE][epoch],
+                        VAL_SDSE: brain_age.history.train_metrics[SDSE][epoch],
                     },
                 ])
             else:
@@ -703,7 +707,9 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
                     ),
                 ])
             output[METRICS] = {
-                key: [metric[key] for metric in metrics if key in metric] for key in [MAE, MSE, VAL_MAE, VAL_MSE]
+                key: [metric[key] for metric in metrics if key in metric] for key in [
+                    MAE, MSE, SDAE, SDSE, VAL_MAE, VAL_MSE, VAL_SDAE, VAL_SDSE,
+                ]
             }
             # Metrics from the augmented data
             # for metric in result.history.keys():
@@ -713,10 +719,10 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
                 # except for the validation metrics (result.history[VAL_MSE])
                 # output[HISTORY] = result.history
                 output[HISTORY] = {
-                    MAE: brain_age.history.epoch_mae,
-                    MSE: brain_age.history.epoch_mse,
-                    VAL_MAE: brain_age.history.val_epoch_mae,
-                    VAL_MSE: brain_age.history.val_epoch_mse,
+                    MAE: brain_age.history.train_metrics[MAE],
+                    MSE: brain_age.history.train_metrics[MSE],
+                    VAL_MAE: brain_age.history.val_metrics[MAE],
+                    VAL_MSE: brain_age.history.val_metrics[MSE],
                 }
         else:
             raise Exception("No participants found for the training set")
