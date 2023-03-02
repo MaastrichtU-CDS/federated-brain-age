@@ -667,7 +667,10 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
             random.seed(seed)
             # Train the model - history is necessary for model selection
             history = parameters.get(HISTORY) or parameters.get(MODEL_SELECTION)
-            result = brain_age.train(history=history)
+            result = brain_age.train(
+                history=history,
+                class_weight=parameters.get(CLASS_WEIGHTS),
+            )
             # Retrieve the weights, metrics for the first and last epoch, and the 
             # history if requested
             info("Retrieve the results")

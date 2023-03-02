@@ -219,7 +219,7 @@ class BrainAge:
         self.model = keras.models.load_model(f"{os.getenv(MODEL_FOLDER)}/{self.id}/model.h5")
         self.model.summary()
 
-    def train(self, history=False):
+    def train(self, history=False, class_weight=None):
         """ Train the CNN model.
         """
         model_version=f"BrainAge_{self.id}"
@@ -257,7 +257,8 @@ class BrainAge:
             validation_data = validation_data,
             validation_steps = validation_steps,
             max_queue_size = 1,
-            callbacks = callbacks
+            callbacks = callbacks,
+            class_weight = class_weight,
         )
 
     def predict(self, data_loader = None):
