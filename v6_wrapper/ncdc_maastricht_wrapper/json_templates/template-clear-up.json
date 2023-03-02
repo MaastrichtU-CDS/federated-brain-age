@@ -1,0 +1,43 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+      "name": "clear-up",
+      "labels": {
+        "app": "clear-up-app"
+      },
+      "namespace": "ncdc-brain-age"
+    },
+    "spec": {
+      "volumes": [
+        {
+          "name": "data",
+          "persistentVolumeClaim": {
+            "claimName": "brain-age-test"
+          }
+        }
+      ],
+      "containers": [
+        {
+          "name": "output-watcher",
+          "image": "busybox:1.33",
+          "command": [],
+          "volumeMounts": [
+            {
+              "name": "data",
+              "mountPath": "/mnt/data"
+            }
+          ],
+          "resources": {
+            "requests": {
+              "nvidia.com/gpu": 1
+            },
+            "limits": {
+              "nvidia.com/gpu": 1
+            }
+          }
+        }
+      ],
+      "restartPolicy": "Never"
+    }
+  }
