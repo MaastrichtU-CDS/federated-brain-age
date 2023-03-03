@@ -96,7 +96,61 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
 
     # Check which task has been requested
     info(f"Task requested: {parameters[TASK]}")
-    if parameters[TASK] == CHECK:
+    if parameters[TASK] == GET_MODEL:
+        # Validate the input
+        missing_parameters = validate_parameters(parameters, {
+            DB_TYPE: {},
+            MODEL_ID: {}
+        })
+        if len(missing_parameters) > 0:
+            return parse_error(
+                f"Missing the following parameters: {', '.join(missing_parameters)}"
+            )
+        # Retrieve the necessary data from the database
+        model_info = {
+            ID: None,
+            SEED: None,
+            ROUND: 0,
+            WEIGHTS: None,
+            DATA_SPLIT: None,
+        }
+        info("Request to save the model")
+        model_info[ID] = parameters[MODEL_ID]
+        try:
+            result = get_model_by_id(parameters[MODEL_ID], db_client)
+            if result:
+                info("Get existing model")
+                model_info[SEED] = result[2]
+                model_info[DATA_SPLIT] = result[3]
+                last_run = get_run_by_id_round(parameters[MODEL_ID], parameters[ROUND], db_client) if \
+                    ROUND in parameters else get_last_run_by_id(parameters[MODEL_ID], db_client)
+                if last_run:
+                    model_info[ROUND] = last_run[3]
+                    model_info[WEIGHTS] = last_run[4]
+            else:
+                error_message = f"Unable to find the model with ID: {str(parameters[MODEL_ID])}"
+                warn(error_message)
+                return {
+                    ERROR: error_message
+                }
+        except Exception as error:
+            error_message = f"Unable to connect to the database and retrieve the model: {str(error)}"
+            warn(error_message)
+            return {
+                ERROR: error_message
+            }
+        # Set the seed value
+        info(f"Using {model_info[SEED]} as the seed")
+        random.seed(model_info[SEED])
+        # Set 3 constant seeds for the training/validation split
+        data_seeds = [random.randint(0, 1000000) for j in range(len(ids))]
+        return {
+            WEIGHTS: [{
+                ORGANIZATION_ID: tasks[key],
+                RESULT: result,
+                } for key, result in output.items()]
+            }
+    elif parameters[TASK] == CHECK:
         # Validate the input
         missing_parameters = validate_parameters(parameters, {DB_TYPE: {}})
         if len(missing_parameters) > 0:
@@ -611,45 +665,67 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
             info("Training the network")
             # Set the random seed
             random.seed(seed)
-            # Train the model
-            result = brain_age.train(history=parameters.get(HISTORY))
+            # Train the model - history is necessary for model selection
+            history = parameters.get(HISTORY) or parameters.get(MODEL_SELECTION)
+            result = brain_age.train(
+                history=history,
+                class_weight=parameters.get(CLASS_WEIGHTS),
+            )
             # Retrieve the weights, metrics for the first and last epoch, and the 
             # history if requested
             info("Retrieve the results")
-            if MODEL_SELECTION in parameters and parameters[MODEL_SELECTION] == VAL_MAE:
+            if history:
                 info("Model selection requested")
                 output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.history.best_model))
             else:
                 output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.model.get_weights()))
-            local_predictions = brain_age.predict()
-            metrics.extend([
-                brain_age.get_metrics(
-                    brain_age.train_loader,
-                    list(local_predictions[TRAIN].values()),
-                ),
-                brain_age.get_metrics(
-                    brain_age.validation_loader,
-                    list(local_predictions[VALIDATION].values()),
-                    prefix="val_",
-                ),
-            ])
+            # Calculate the metrics
+            if history:
+                epoch = brain_age.history.best_epoch if parameters.get(MODEL_SELECTION) else -1
+                metrics.extend([
+                    {
+                        MAE: brain_age.history.train_metrics[MAE][epoch],
+                        MSE: brain_age.history.train_metrics[MSE][epoch],
+                        SDAE: brain_age.history.train_metrics[SDAE][epoch],
+                        SDSE: brain_age.history.train_metrics[SDSE][epoch],
+                    },
+                    {
+                        VAL_MAE: brain_age.history.val_metrics[MAE][epoch],
+                        VAL_MSE: brain_age.history.val_metrics[MSE][epoch],
+                        VAL_SDAE: brain_age.history.train_metrics[SDAE][epoch],
+                        VAL_SDSE: brain_age.history.train_metrics[SDSE][epoch],
+                    },
+                ])
+            else:
+                local_predictions = brain_age.predict()
+                metrics.extend([
+                    brain_age.get_metrics(
+                        brain_age.train_loader,
+                        list(local_predictions[TRAIN].values()),
+                    ),
+                    brain_age.get_metrics(
+                        brain_age.validation_loader,
+                        list(local_predictions[VALIDATION].values()),
+                        prefix="val_",
+                    ),
+                ])
             output[METRICS] = {
-                key: [metric[key] for metric in metrics if key in metric] for key in [MAE, MSE, VAL_MAE, VAL_MSE]
+                key: [metric[key] for metric in metrics if key in metric] for key in [
+                    MAE, MSE, SDAE, SDSE, VAL_MAE, VAL_MSE, VAL_SDAE, VAL_SDSE,
+                ]
             }
             # Metrics from the augmented data
             # for metric in result.history.keys():
             #     output[METRICS][metric] = [result.history[metric][0], result.history[metric][-1]]
             if parameters.get(HISTORY):
                 # Tensorflow history is an average of the results by batch
-                # except for the validation metrics
+                # except for the validation metrics (result.history[VAL_MSE])
                 # output[HISTORY] = result.history
                 output[HISTORY] = {
-                    MAE: brain_age.history.epoch_mae,
-                    MSE: brain_age.history.epoch_mse,
-                    #VAL_MAE: result.history[VAL_MAE],
-                    #VAL_MSE: result.history[VAL_MSE],
-                    VAL_MAE: brain_age.history.val_epoch_mae,
-                    VAL_MSE: brain_age.history.val_epoch_mse,
+                    MAE: brain_age.history.train_metrics[MAE],
+                    MSE: brain_age.history.train_metrics[MSE],
+                    VAL_MAE: brain_age.history.val_metrics[MAE],
+                    VAL_MSE: brain_age.history.val_metrics[MSE],
                 }
         else:
             raise Exception("No participants found for the training set")

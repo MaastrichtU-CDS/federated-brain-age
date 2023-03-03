@@ -1,0 +1,2 @@
+CREATE TABLE IF NOT EXISTS models (model_id bigint PRIMARY KEY, date DATE NOT NULL, seed INT NOT NULL);
+CREATE TABLE IF NOT EXISTS runs (run_id serial, model_id bigint, date DATE NOT NULL, seed INT NOT NULL, PRIMARY KEY (run_id, model_id), FOREIGN KEY (model_id) REFERENCES models (model_id));
