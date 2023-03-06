@@ -7,8 +7,9 @@ import os
 from tensorflow import keras
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
-from tensorflow.keras.layers import Dense, Activation, Conv3D, MaxPooling3D, BatchNormalization, Dropout, GlobalAveragePooling3D
-from tensorflow.keras.layers import Input, concatenate
+from tensorflow.keras.layers import Dense, Activation, Conv3D, MaxPooling3D, BatchNormalization, Dropout, GlobalAveragePooling3D, Input, concatenate
+from tensorflow.keras import metrics
+import keras.backend as K
 
 from federated_brain_age.callbacks import DecayingLRSchedule
 from federated_brain_age.constants import *
@@ -40,6 +41,26 @@ DEFAULT_HYPERPARAMETERS = {
 }
 
 DEFAULT_MASK_NAME = "Brain_GM_mask_1mm_MNI_kNN_conservative.nii.gz"
+
+def loss_fun(y_true, y_pred, sample_weight=None):
+    weights = 1
+    axis = -1
+    sample_weight = {0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 8: 1, 9: 1, 10: 1, 11: 1, 12: 1, 13: 1, 14: 1, 15: 1, 16: 1, 17: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 1, 23: 1, 24: 1, 25: 1, 26: 1, 27: 1, 28: 1, 29: 1, 30: 1, 31: 1, 32: 1, 33: 1, 34: 1, 35: 1, 36: 1, 37: 1, 38: 3, 39: 3, 40: 3, 41: 3, 42: 3, 43: 3, 44: 3, 45: 3, 46: 2, 47: 2, 48: 2, 49: 2, 50: 2, 51: 2, 52: 2, 53: 2, 54: 1, 55: 1, 56: 1, 57: 1, 58: 1, 59: 1, 60: 1, 61: 1, 62: 2, 63: 2, 64: 2, 65: 2, 66: 2, 67: 2, 68: 2, 69: 2, 70: 2, 71: 2, 72: 2, 73: 2, 74: 2, 75: 3, 76: 3, 77: 3, 78: 3, 79: 3, 80: 3, 81: 3, 82: 3, 83: 3, 84: 3}
+    #sample_weight = [i/len(sample_weight.values()) if i == 1 else i for i in list(sample_weight.values())]
+    sample_weight = list(sample_weight.values())
+    # classSelectors = K.argmax(y_true, axis=axis)
+    classSelectors = [K.equal(K.cast(i, K.floatx()), y_true) for i in range(len(sample_weight))]
+    classSelectors = [K.cast(x, K.floatx()) for x in classSelectors]
+    weights = [sel * w for sel,w in zip(classSelectors, sample_weight)]
+    weightMultiplier = weights[0]
+    for i in range(1, len(weights)):
+        weightMultiplier = weightMultiplier + weights[i] 
+    # if sample_weight:
+    #     weights = K.sum(
+    #         [K.cast(K.equal(y_true, list(sample_weight.keys())[i]), K.floatx()) * list(sample_weight.items())[i] \
+    #             for i in range(0, len(sample_weight.items()))]
+    # )
+    return K.mean(K.square((y_true - y_pred) * weightMultiplier))
 
 class BrainAge:
     def __init__(self, parameters, id, images_path, db_type, db_client, seed=None, split=None):
@@ -171,7 +192,8 @@ class BrainAge:
             #decay = parameters(DECAY),
         )
         model.compile(
-            loss='mean_squared_error',
+            loss=loss_fun,
+            #loss="mean_squared_error",
             optimizer=adam_opt,
             metrics=['mae', 'mse']
         )
@@ -258,7 +280,7 @@ class BrainAge:
             validation_steps = validation_steps,
             max_queue_size = 1,
             callbacks = callbacks,
-            class_weight = class_weight,
+            # class_weight = class_weight,
         )
 
     def predict(self, data_loader = None):
