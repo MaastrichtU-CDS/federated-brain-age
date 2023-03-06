@@ -480,10 +480,16 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
             total_training_samples = sum(sample_size_training)
             brain_age_weights_update = []
             models_parsed = []
+            # Perform a weighted average of give the same weight to all participants
+            weighted_average = True
+            if AVERAGING_WEIGHTS in parameters[MODEL][MASTER]:
+                weighted_average = parameters[MODEL][MASTER][AVERAGING_WEIGHTS]
+                if not weighted_average:
+                    total_training_samples = len(output_data)
             for result in output_data:
                 models_parsed.append({
                     WEIGHTS: json.loads(result[WEIGHTS]),
-                    SAMPLE_SIZE: result[SAMPLE_SIZE][0]
+                    SAMPLE_SIZE: result[SAMPLE_SIZE][0] if weighted_average else 1
                 })
             for j in range(0, len(models_parsed[0][WEIGHTS])):
                 brain_age_weights_update.append(
