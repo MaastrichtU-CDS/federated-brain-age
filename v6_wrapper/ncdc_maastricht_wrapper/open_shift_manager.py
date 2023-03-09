@@ -53,7 +53,7 @@ def create_tasks(task_folder, input_file, output_file, volume, task_id, algorith
             "task": "run-algorithm-app",
             "description": "Run the main algorithm",
             "file": f"{os.getenv('TEMPLATES_FOLDER_PATH')}/template-run-algorithm.json",
-            "sleep": 120,
+            "sleep": 150,
             "volume": volume,
             "env": ["INPUT_FILE", "OUTPUT_FILE"],
             "algorithm_image": algorithm_image
@@ -143,7 +143,7 @@ def run_task(task_id, task_definition):
     n_tries = 0
     complete = False
     # TODO: Task may end in error but in some cases the error may be temporary...
-    while n_tries < 200 and not check_task_status(container_info, 'Succeeded'):
+    while n_tries < 240 and not check_task_status(container_info, 'Succeeded'):
         info(f"Task still running, waiting {task_definition['sleep']} seconds")
         time.sleep(task_definition["sleep"])
         obj[0].refresh()

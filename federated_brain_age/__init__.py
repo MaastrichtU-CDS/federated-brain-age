@@ -672,22 +672,23 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
             # Set the random seed
             random.seed(seed)
             # Train the model - history is necessary for model selection
-            history = parameters.get(HISTORY) or parameters.get(MODEL_SELECTION)
+            history = parameters.get(HISTORY)
+            model_selection = parameters.get(MODEL_SELECTION)
             result = brain_age.train(
-                history=history,
+                history=history or model_selection,
                 class_weight=parameters.get(CLASS_WEIGHTS),
             )
             # Retrieve the weights, metrics for the first and last epoch, and the 
             # history if requested
             info("Retrieve the results")
-            if history:
+            if model_selection:
                 info("Model selection requested")
                 output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.history.best_model))
             else:
                 output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.model.get_weights()))
             # Calculate the metrics
             if history:
-                epoch = brain_age.history.best_epoch if parameters.get(MODEL_SELECTION) else -1
+                epoch = brain_age.history.best_epoch if model_selection else -1
                 metrics.extend([
                     {
                         MAE: brain_age.history.train_metrics[MAE][epoch],
@@ -698,8 +699,8 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
                     {
                         VAL_MAE: brain_age.history.val_metrics[MAE][epoch],
                         VAL_MSE: brain_age.history.val_metrics[MSE][epoch],
-                        VAL_SDAE: brain_age.history.train_metrics[SDAE][epoch],
-                        VAL_SDSE: brain_age.history.train_metrics[SDSE][epoch],
+                        VAL_SDAE: brain_age.history.val_metrics[SDAE][epoch],
+                        VAL_SDSE: brain_age.history.val_metrics[SDSE][epoch],
                     },
                 ])
             else:
@@ -723,7 +724,7 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
             # Metrics from the augmented data
             # for metric in result.history.keys():
             #     output[METRICS][metric] = [result.history[metric][0], result.history[metric][-1]]
-            if parameters.get(HISTORY):
+            if history:
                 # Tensorflow history is an average of the results by batch
                 # except for the validation metrics (result.history[VAL_MSE])
                 # output[HISTORY] = result.history

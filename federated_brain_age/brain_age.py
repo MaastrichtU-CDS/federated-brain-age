@@ -264,7 +264,6 @@ class BrainAge:
     def predict(self, data_loader = None):
         """ Make the predictions for the data
         """
-        print("Predict")
         predictions_by_participant = {}
         # Load the parameters
         batch_size = self.get_parameter(BATCH_SIZE)
