@@ -623,6 +623,7 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
     #         }
     try:
         # Initialize the model
+        info("Initialize")
         brain_age = BrainAge(
             parameters,
             parameters[MODEL_ID],
@@ -634,6 +635,7 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
             seed=data_seed,
             split=data_split,
         )
+        info("Check participants")
         participants_by_subset = {
             TRAIN: brain_age.train_loader.participant_list,
             VALIDATION: brain_age.train_loader.participant_list,
@@ -645,6 +647,9 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
             if len(subset_participants[2]) > 0:
                 warn(f"{str(len(subset_participants[2]))} of {subset} participants without imaging " +
                     f"data available: {', '.join([str(participant) for participant in subset_participants[2]])}")
+            if len(subset_participants[3]) > 0:
+                warn(f"{str(len(subset_participants[3]))} of {subset} participants with duplicate information " +
+                    f"data available: {', '.join([str(participant) for participant in subset_participants[3]])}")
         output[SAMPLE_SIZE] = [
             len(brain_age.train_loader.participants), len(brain_age.validation_loader.participants)
         ]

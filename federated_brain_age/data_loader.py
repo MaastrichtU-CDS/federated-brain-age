@@ -55,20 +55,25 @@ class DataLoader:
         """ Validate if the data from the participants
             is available.
         """
-        participants_list = [[], [], []]
+        participants_list = [[], [], [], []]
         for participant in participants:
             try:
                 patient_info = self.clinical_data.loc[str(participant)]
-                # The flag 'IS_TRAINING_DATA' identifies the data that will be used for
-                # training and thus splitted between training and validation.
-                if (training or validation) == int(patient_info[IS_TRAINING_DATA]):
-                    patient_filename = str(patient_info[IMAGING_ID]).strip() + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
-                    if os.path.exists(os.path.join(self.images_path, patient_filename)):
-                        participants_list[0].append(participant)
-                    else:
-                        participants_list[2].append(participant)
+                if len(patient_info) == 1:
+                    # The flag 'IS_TRAINING_DATA' identifies the data that will be used for
+                    # training and thus splitted between training and validation.
+                    if (training or validation) == int(patient_info[IS_TRAINING_DATA]):
+                        patient_filename = str(patient_info[IMAGING_ID]).strip() + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
+                        if os.path.exists(os.path.join(self.images_path, patient_filename)):
+                            participants_list[0].append(participant)
+                        else:
+                            participants_list[2].append(participant)
+                else:
+                    participants_list[3].append(participant)    
             except KeyError as error:
                 participants_list[1].append(participant)
+            except Exception as error:
+                raise Exception(f"Error validating participant {str(participant)}: {str(error)}")
         return participants_list
         
 
