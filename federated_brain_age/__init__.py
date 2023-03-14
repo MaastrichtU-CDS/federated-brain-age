@@ -638,7 +638,7 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
         info("Check participants")
         participants_by_subset = {
             TRAIN: brain_age.train_loader.participant_list,
-            VALIDATION: brain_age.train_loader.participant_list,
+            VALIDATION: brain_age.validation_loader.participant_list,
         }
         for subset, subset_participants in participants_by_subset.items():
             if len(subset_participants[1]) > 0:

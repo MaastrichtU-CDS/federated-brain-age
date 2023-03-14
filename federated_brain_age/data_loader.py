@@ -58,8 +58,8 @@ class DataLoader:
         participants_list = [[], [], [], []]
         for participant in participants:
             try:
-                patient_info = self.clinical_data.loc[str(participant)]
-                if len(patient_info) == 1:
+                if participants.count(participant) == 1:
+                    patient_info = self.clinical_data.loc[str(participant)]
                     # The flag 'IS_TRAINING_DATA' identifies the data that will be used for
                     # training and thus splitted between training and validation.
                     if (training or validation) == int(patient_info[IS_TRAINING_DATA]):
@@ -68,7 +68,7 @@ class DataLoader:
                             participants_list[0].append(participant)
                         else:
                             participants_list[2].append(participant)
-                else:
+                elif participant not in participants_list[3]:
                     participants_list[3].append(participant)    
             except KeyError as error:
                 participants_list[1].append(participant)
