@@ -295,10 +295,10 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
         # Recover the previous state if requested
         model_info = {
             ID: None,
-            SEED: None,
+            SEED: parameters.get(SEED),
             ROUND: 0,
             WEIGHTS: None,
-            DATA_SPLIT: None,
+            DATA_SPLIT: parameters[MODEL][DATA_SPLIT],
         }
         store_model = SAVE_MODEL in parameters and parameters[SAVE_MODEL]
         run_id = None
@@ -322,7 +322,6 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
                         info("Insert the new model")
                         model_info[SEED] = parameters.get(SEED) if \
                             parameters.get(SEED) is not None else random.randint(0, 1000000)
-                        model_info[DATA_SPLIT] = parameters[MODEL][DATA_SPLIT]
                         insert_model(model_info[ID], model_info[SEED], model_info[DATA_SPLIT], db_client)
                 except Exception as error:
                     error_message = f"Unable to connect to the database and retrieve the model: {str(error)}"
@@ -682,6 +681,7 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
             result = brain_age.train(
                 history=history or model_selection,
                 class_weight=parameters.get(CLASS_WEIGHTS),
+                save_model=parameters.get(SAVE_MODEL),
             )
             # Retrieve the weights, metrics for the first and last epoch, and the 
             # history if requested

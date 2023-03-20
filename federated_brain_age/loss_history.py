@@ -5,13 +5,14 @@ from tensorflow import keras
 from federated_brain_age.constants import *
  
 class LossHistory(keras.callbacks.Callback):
-    def __init__(self, model):
+    def __init__(self, model, store_models=False):
         # self.ne = epochs
         # self.mv = modelversion 
         self.model_class = model
         self.best_model = None
         self.best_mae = None
         self.best_epoch = -1
+        self.store_models = store_models
 
     def on_train_begin(self, logs={}):
         self.train_metrics = {
@@ -58,8 +59,8 @@ class LossHistory(keras.callbacks.Callback):
             self.best_mae = logs.get('val_mae')
             self.best_epoch = epoch
             self.best_model = self.model.get_weights()
-            # TODO: Include an option to save the model
-            # self.model_class.save_model(suffix=f"-{str(epoch)}")
+            if self.store_models:
+                self.model_class.save_model(suffix=f"-{str(epoch)}")
 
     def on_train_end(self, logs=None):
         print(self.train_metrics)
