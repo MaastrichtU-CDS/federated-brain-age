@@ -682,6 +682,7 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
                 history=history or model_selection,
                 class_weight=parameters.get(CLASS_WEIGHTS),
                 save_model=parameters.get(SAVE_MODEL),
+                complete_metrics=parameters.get(COMPLETE_METRICS, True),
             )
             # Retrieve the weights, metrics for the first and last epoch, and the 
             # history if requested

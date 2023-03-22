@@ -219,7 +219,7 @@ class BrainAge:
         self.model = keras.models.load_model(f"{os.getenv(MODEL_FOLDER)}/{self.id}/model.h5")
         self.model.summary()
 
-    def train(self, history=False, class_weight=None, save_model=False):
+    def train(self, history=False, class_weight=None, save_model=False, complete_metrics=True):
         """ Train the CNN model.
         """
         model_version=f"BrainAge_{self.id}"
@@ -234,7 +234,7 @@ class BrainAge:
             stoptraining = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=0, mode='min')
             callbacks.append(stoptraining)
         if history:
-            self.history = LossHistory(self, store_models=save_model)
+            self.history = LossHistory(self, store_models=save_model, complete_metrics=complete_metrics)
             callbacks.append(self.history)
         # Calculate the training steps
         patients_per_epoch = min(self.get_parameter(PATIENTS_PER_EPOCH), len(self.train_loader.participants))
