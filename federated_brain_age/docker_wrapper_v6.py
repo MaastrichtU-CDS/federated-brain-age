@@ -9,6 +9,7 @@ import pickle
 # import time
 
 import psycopg2
+import tensorflow as tf
 
 # from vantage6.tools.dispatch_rpc import dispact_rpc
 from federated_brain_age.dispatch_rpc_v6 import dispact_rpc
@@ -72,7 +73,7 @@ def docker_wrapper(module: str):
     # read input from the mounted inputfile.
     input_file = os.environ["INPUT_FILE"]
     info(f"Reading input file {input_file}")
-
+    tf_setup()
     input_data = load_input(input_file)
     output_file = os.environ["OUTPUT_FILE"]
     output_format = input_data.get('output_format', None)
@@ -140,6 +141,17 @@ def docker_wrapper(module: str):
     # transfered back to the server by the node-instance.
     info(f"Writing output to {output_file}")
     write_output(output_format, output, output_file)
+
+def tf_setup():
+    """ Setup the necessary actions prior to using the GPU
+    """
+    info("Contain TF memory use")
+    physical_devices = tf.config.list_physical_devices('GPU')
+    for physical_device in physical_devices:
+        try:
+            tf.config.experimental.set_memory_growth(physical_device, True)
+        except:
+            pass
 
 def write_output(output_format, output, output_file):
     """

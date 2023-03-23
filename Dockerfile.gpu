@@ -33,6 +33,14 @@ RUN curl -s -L https://nvidia.github.io/nvidia-container-runtime/gpgkey | \
 #     && curl -s -L https://nvidia.github.io/nvidia-container-runtime/$distribution/nvidia-container-runtime.list | 
 # nvidia-docker2 
 RUN apt-get update && apt-get install -y nvidia-container-runtime nvidia-container-toolkit nvidia-docker2
+# RUN apt-get install -y vim
+ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/lib/x86_64-linux-gnu"
+
+# Temporary folder used for certain applications where it is recommended to
+# copy the data first to the container instead of using a persistent storage
+# (improves speed for reading/writing)
+# RUN mkdir /mnt/temporary
+# RUN chmod 777 /mnt/temporary
 
 # install the federated algorithm
 # requirements filed used for development
@@ -41,6 +49,9 @@ RUN pip install -r requirements.txt
 COPY . /app
 RUN pip install /app
 ENV PKG_NAME=${PKG_NAME}
+
+# TODO: Temporary solution for a continous task manager running in a container
+# COPY ./v6_wrapper/ncdc_maastricht_wrapper/tasks_manager.py /mnt/temporary/tasks_manager.py
 
 # Execute the docker wrapper when running the image
 CMD python -c "from federated_brain_age.docker_wrapper_v6 import docker_wrapper; docker_wrapper('${PKG_NAME}')"
