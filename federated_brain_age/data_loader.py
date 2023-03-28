@@ -109,7 +109,8 @@ class DataLoader:
         input2 = patient_info.get(SEX)    
 
         # Get image
-        patient_filename = patient_index.strip() + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
+        imaging_id = patient_index.get(IMAGING_ID)
+        patient_filename = imaging_id.strip() + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
         # TODO: Check if file exists
         # Probably better to be done prior to this stage and get the "real"
         # number of participants
