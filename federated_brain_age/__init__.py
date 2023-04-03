@@ -394,10 +394,16 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
                         DATA_SPLIT: model_info[DATA_SPLIT],
                     }
                 }
-                task_id = execute_task(client, input, [org_id], algorithm_image)
-                tasks[task_id] = {
-                    ORGANIZATION_ID: org_id
-                }
+                if RESTART_TRAINING in parameters and org_id in parameters[RESTART_TRAINING] \
+                    and i != model_info[ROUND]:
+                    # Allows to reuse of a previous task avoiding a new training in case of failing
+                    # to merge the results or a failure in one of the organizations
+                    task_id = parameters[RESTART_TRAINING][org_id]
+                else:
+                    task_id = execute_task(client, input, [org_id], algorithm_image)
+                    tasks[task_id] = {
+                        ORGANIZATION_ID: org_id
+                    }
             output = get_result(
                 client,
                 tasks,
