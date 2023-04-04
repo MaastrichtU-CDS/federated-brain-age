@@ -1,0 +1,19 @@
+# Wrapper specific for each organization
+/v6_wrapper
+# Examples
+/test
+# Other
+/scripts
+/code
+*.csv
+*.h5
+*.py
+!setup.py
+*.txt
+!requirements.txt
+!requirements-gpu.txt
+# !./v6_wrapper/*
+*.sh
+*.nii.gz
+# Models
+/models
