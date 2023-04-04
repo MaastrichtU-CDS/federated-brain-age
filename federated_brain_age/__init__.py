@@ -395,10 +395,11 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
                     }
                 }
                 if RESTART_TRAINING in parameters and org_id in parameters[RESTART_TRAINING] \
-                    and i != model_info[ROUND]:
+                    and i == model_info[ROUND]:
                     # Allows to reuse of a previous task avoiding a new training in case of failing
                     # to merge the results or a failure in one of the organizations
                     task_id = parameters[RESTART_TRAINING][org_id]
+                    info(f"Restarting the training for organizaion {str(org_id)} using task id {str(task_id)}")
                 else:
                     task_id = execute_task(client, input, [org_id], algorithm_image)
                     tasks[task_id] = {
@@ -429,6 +430,7 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
                 VAL_MSE: [],
             }
             predictions = {}
+            age_gap = {}
             sample_size_training = [result[SAMPLE_SIZE][0] for result in output_data]
             sample_size_validation = [result[SAMPLE_SIZE][1] for result in output_data]
             info(
@@ -443,7 +445,8 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
                     METRICS: result[METRICS],
                     SAMPLE_SIZE: result[SAMPLE_SIZE]
                 }
-                predictions[tasks[task_id][ORGANIZATION_ID]] = result[PREDICTIONS]
+                predictions[tasks[task_id][ORGANIZATION_ID]] = result.get(PREDICTIONS, [])
+                age_gap[tasks[task_id][ORGANIZATION_ID]] = result.get(AGE_GAP, [])
                 for metric in metrics_aggregator.keys():
                     if metric in result[METRICS] and len(result[METRICS][metric]) > 0:
                         metrics_aggregator[metric].append(result[METRICS][metric][0])
@@ -479,6 +482,7 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
                     metrics[GLOBAL][VAL_MSE],
                     json.dumps(metrics),
                     json.dumps(predictions),
+                    json.dumps(age_gap),
                     db_client
                 )
             # Update the model weights
@@ -616,6 +620,7 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
         METRICS: {},
         HISTORY: {},
         PREDICTIONS: {},
+        AGE_GAP: {},
     }
     # Retrieve the data from XNAT if necessary
     # data_path = os.path.join(os.getenv(DATA_FOLDER), parameters[MODEL_ID])
@@ -681,6 +686,10 @@ def RPC_brain_age(db_client, parameters, weights, data_seed, seed, data_split):
                     prefix="val_",
                 ),
             ]
+            output[AGE_GAP] = {
+                AGE_GAP: metrics[0].get(AGE_GAP, []),
+                VAL_AGE_GAP: metrics[1].get(VAL_AGE_GAP, []),
+            }
             info("Training the network")
             # Set the random seed
             random.seed(seed)
@@ -764,6 +773,7 @@ def RPC_predict(db_client, parameters, weights, data_seed, seed, data_split):
     output = {
         PREDICTIONS: {},
         METRICS: {},
+        AGE_GAP: {},
     }
     try:
         # Initialize the model
@@ -815,12 +825,18 @@ def RPC_predict(db_client, parameters, weights, data_seed, seed, data_split):
                 output[PREDICTIONS] = brain_age.predict({
                     TEST: data_loader
                 })
-                output[METRICS] = [
-                    brain_age.get_metrics(
-                        data_loader,
-                        list(output[PREDICTIONS][TEST].values()),
-                    ),
-                ]
+                metrics = brain_age.get_metrics(
+                    data_loader,
+                    list(output[PREDICTIONS][TEST].values()),
+                )
+                output[METRICS] = [{
+                    key: [metric[key] for metric in metrics if key in metric] for key in [
+                        MAE, MSE, SDAE, SDSE, VAL_MAE, VAL_MSE, VAL_SDAE, VAL_SDSE,
+                    ]
+                }]
+                output[AGE_GAP] = {
+                    AGE_GAP: metrics.get(AGE_GAP, []),
+                }
             else:
                 raise Exception("No participants found for the prediction dataset requested")
         else:
@@ -829,7 +845,7 @@ def RPC_predict(db_client, parameters, weights, data_seed, seed, data_split):
                 len(brain_age.train_loader.participants), len(brain_age.validation_loader.participants)
             ]
             output[PREDICTIONS] = brain_age.predict()
-            output[METRICS] = [
+            metrics = [
                 brain_age.get_metrics(
                     brain_age.train_loader,
                     list(output[PREDICTIONS][TRAIN].values()),
@@ -840,6 +856,11 @@ def RPC_predict(db_client, parameters, weights, data_seed, seed, data_split):
                     prefix="val_",
                 ),
             ]
+            output[METRICS] = metrics
+            output[AGE_GAP] = {
+                AGE_GAP: metrics[0].get(AGE_GAP, []),
+                VAL_AGE_GAP: metrics[1].get(VAL_AGE_GAP, []),
+            }
     except Exception as error:
         message = f"Error while predicting: {str(error)}"
         warn(message)

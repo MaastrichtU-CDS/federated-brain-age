@@ -94,6 +94,7 @@ class BrainAge:
                 f"{prefix}{SDAE}": float(np.std(np.absolute(np.subtract(y_true, y_pred)))),
                 f"{prefix}{MSE}": float(keras.metrics.mean_squared_error(y_true, y_pred)),
                 f"{prefix}{SDSE}": float(np.std(np.square(np.subtract(y_true, y_pred)))),
+                f"{prefix}{AGE_GAP}": {participant: y_t - y_p for participant, y_t, y_p in zip(loader.participants, y_true, y_pred)},
             }
         return metrics
 

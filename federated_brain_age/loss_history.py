@@ -42,27 +42,29 @@ class LossHistory(keras.callbacks.Callback):
                 list(local_predictions[TRAIN].values()),
             )
             for metric, value in metrics_epoch.items():
-                self.train_metrics[metric].append(value)
+                if metric not in [AGE_GAP, VAL_AGE_GAP]:
+                    self.train_metrics[metric].append(value)
             print(f"Training MAE {metrics_epoch['mae']} MSE {metrics_epoch['mse']}")
-            print(metrics_epoch)
+            print({key: metrics_epoch[key] for key in metrics_epoch if key not in [AGE_GAP, VAL_AGE_GAP]})
             # Calculate the metrics for the validation set
             metrics_epoch = self.model_class.get_metrics(
                 self.model_class.validation_loader,
                 list(local_predictions[VALIDATION].values()),
             )
             for metric, value in metrics_epoch.items():
-                self.val_metrics[metric].append(value)
+                if metric not in [AGE_GAP, VAL_AGE_GAP]:
+                    self.val_metrics[metric].append(value)
             print(f"Validation MAE {metrics_epoch['mae']} MSE {metrics_epoch['mse']}")
-            print(metrics_epoch)
+            print({key: metrics_epoch[key] for key in metrics_epoch if key not in [AGE_GAP, VAL_AGE_GAP]})
             # self.val_epoch_mae.append(logs.get('val_mae'))
             # self.val_epoch_mse.append(logs.get('val_mse'))
         else:
             # The metrics for the validation set can be retrieved from the TF logs
             for metric in self.train_metrics.keys():
                 self.train_metrics[metric].append(-1)
-                self.val_metrics[metric].append(-1)
             self.val_metrics[MAE].append(logs.get('val_mae'))
             self.val_metrics[MSE].append(logs.get('val_mse'))
+            print(f"Validation MAE {logs.get('val_mae')} MSE {logs.get('val_mse')}")
         # Model Selection
         if self.best_mae is None or self.best_mae > logs.get('val_mae'):
             self.best_mae = logs.get('val_mae')

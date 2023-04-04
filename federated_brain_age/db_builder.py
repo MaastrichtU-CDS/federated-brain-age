@@ -48,12 +48,12 @@ def insert_run(model_id, round, weights, mae, mse, metrics, pg, table=RUNS_TABLE
         fetch_one=True,
     )
 
-def update_run(model_id, run_id, mae, mse, val_mae, val_mse, metrics, predictions, pg, table=RUNS_TABLE):
+def update_run(model_id, run_id, mae, mse, val_mae, val_mse, metrics, predictions, age_gap, pg, table=RUNS_TABLE):
     """ Insert a new model.
     """
     return run_sql(
         pg,
-        f"UPDATE {table} SET mae = %s, mse = %s, val_mae = %s, val_mse = %s, metrics = %s, predictions = %s " +
+        f"UPDATE {table} SET mae = %s, mse = %s, val_mae = %s, val_mse = %s, metrics = %s, predictions = %s, age_gap = %s " +
             f"WHERE model_id = '{model_id}' AND run_id = {run_id}",
-        parameters=(mae, mse, val_mae, val_mse, metrics, predictions),
+        parameters=(mae, mse, val_mae, val_mse, metrics, predictions, age_gap),
     )
