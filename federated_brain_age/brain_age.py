@@ -82,10 +82,11 @@ class BrainAge:
     def get_metrics(loader, y_pred, prefix=''):
         """ Calculate the metrics.
         """
-        metrics = {
-            f"{prefix}{MAE}": -1,
-            f"{prefix}{MSE}": -1,
-        }
+        metrics = {}
+        # Initialize the metrics
+        for metric in [MAE, MSE, SDAE, SDSE]:
+            metrics[f"{prefix}{metric}"] = -1
+        # Compute the metrics
         if len(loader.participants) > 0:
             ages = loader.clinical_data.loc[loader.participants, AGE].values
             y_true = list(ages.astype(float))

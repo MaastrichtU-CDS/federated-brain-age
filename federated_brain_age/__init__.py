@@ -827,18 +827,16 @@ def RPC_predict(db_client, parameters, weights, data_seed, seed, data_split):
                 output[PREDICTIONS] = brain_age.predict({
                     TEST: data_loader
                 })
-                metrics = brain_age.get_metrics(
+                metrics = [brain_age.get_metrics(
                     data_loader,
                     list(output[PREDICTIONS][TEST].values()),
-                )
+                )]
                 output[METRICS] = [{
                     key: [metric[key] for metric in metrics if key in metric] for key in [
-                        MAE, MSE, SDAE, SDSE, VAL_MAE, VAL_MSE, VAL_SDAE, VAL_SDSE,
+                        MAE, MSE, SDAE, SDSE
                     ]
                 }]
-                output[AGE_GAP] = {
-                    AGE_GAP: metrics.get(AGE_GAP, []),
-                }
+                output[AGE_GAP] = metrics[0].get(AGE_GAP, [])
             else:
                 raise Exception("No participants found for the prediction dataset requested")
         else:
@@ -858,11 +856,13 @@ def RPC_predict(db_client, parameters, weights, data_seed, seed, data_split):
                     prefix="val_",
                 ),
             ]
-            output[METRICS] = metrics
-            output[AGE_GAP] = {
-                AGE_GAP: metrics[0].get(AGE_GAP, []),
-                VAL_AGE_GAP: metrics[1].get(VAL_AGE_GAP, []),
-            }
+            output[METRICS] = [{
+                key: [metric[key] for metric in metrics if key in metric] for key in [
+                    MAE, MSE, SDAE, SDSE, VAL_MAE, VAL_MSE, VAL_SDAE, VAL_SDSE,
+                ]
+            }]
+            output[AGE_GAP] = metrics[0].get(AGE_GAP, {})
+            output[VAL_AGE_GAP] = metrics[1].get(VAL_AGE_GAP, {}),
     except Exception as error:
         message = f"Error while predicting: {str(error)}"
         warn(message)
