@@ -394,6 +394,7 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
                         DATA_SPLIT: model_info[DATA_SPLIT],
                     }
                 }
+                task_id = None
                 if RESTART_TRAINING in parameters and org_id in parameters[RESTART_TRAINING] \
                     and i == model_info[ROUND]:
                     # Allows to reuse of a previous task avoiding a new training in case of failing
@@ -402,6 +403,7 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
                     info(f"Restarting the training for organizaion {str(org_id)} using task id {str(task_id)}")
                 else:
                     task_id = execute_task(client, input, [org_id], algorithm_image)
+                if task_id:
                     tasks[task_id] = {
                         ORGANIZATION_ID: org_id
                     }
