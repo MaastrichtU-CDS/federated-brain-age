@@ -9,7 +9,8 @@ DATA_PATH = "/mnt"
 
 PARAMETERS = {
     TASK: TRAIN,
-    TASK_ID: "test",
+    MODEL_ID: "test",
+    SAVE_MODEL: False,
     DB_TYPE: DB_CSV,
     MAX_NUMBER_TRIES: 10,
     SLEEP_TIME: 5,
@@ -38,11 +39,11 @@ round_count = 0
 
 lib = importlib.import_module("federated_brain_age")
 
-def mock_execute_task(client, parameters, org_ids):
+def mock_execute_task(client, parameters, org_ids, algorithm_image = None):
     print(f"Mock: execute task for the organizations {org_ids}")
     return org_ids[0]
 
-def mock_get_orgarnization(client):
+def mock_get_orgarnization(client, org_ids):
     print("Mock: get organizations")
     return [
         {
@@ -60,17 +61,19 @@ def mock_get_result(client, tasks, max_number_tries, sleep_time):
     global round_count
     round_count += 1
     for task_id in tasks.keys():
+        # db_client, parameters, weights, data_seed, seed, data_split
         output[task_id] = brain_age_method(
             None,
             {
                 **PARAMETERS[MODEL][NODE],
-                TASK_ID: PARAMETERS[TASK_ID],
+                MODEL_ID: PARAMETERS[MODEL_ID],
                 DB_TYPE: PARAMETERS[DB_TYPE],
                 ROUNDS: round_count,
                 HISTORY: PARAMETERS[HISTORY],
-                
+                DATA_SPLIT: PARAMETERS[MODEL][DATA_SPLIT]
             },
             None,
+            1,
             1,
             0.7,
         )
