@@ -7,14 +7,14 @@
       "app": "start-up-app",
       "task": ""
     },
-    "namespace": "ncdc-brain-age"
+    "namespace": "project"
   },
   "spec": {
     "volumes": [
       {
         "name": "data",
         "persistentVolumeClaim": {
-          "claimName": "brain-age-test"
+          "claimName": "persistent-volume"
         }
       }
     ],
