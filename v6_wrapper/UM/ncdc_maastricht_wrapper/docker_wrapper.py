@@ -7,6 +7,7 @@ algorithms with uniform input and output handling.
 import os
 import pickle
 import uuid
+import re
 
 import psycopg2
 
@@ -19,6 +20,7 @@ from vantage6.tools.exceptions import DeserializationException
 from typing import BinaryIO
 
 from ncdc_maastricht_wrapper.open_shift_manager import create_tasks, login, run_task
+# from ncdc_maastricht_wrapper.pod_manager import create_tasks, login, run_task
 from federated_brain_age import master
 
 _DATA_FORMAT_SEPARATOR = '.'
@@ -88,11 +90,13 @@ def docker_wrapper(module: str):
         # Output configurations
         output_format = input_data.get('output_format', None)
         # Validate docker image
-        allowed_images = os.getenv("allowed_algorithms", "").split(str=",")
+        info(os.getenv("ALLOWED_ALGORITHMS", ""))
+        allowed_images = os.getenv("ALLOWED_ALGORITHMS", "").split(",")
         docker_image_name= input_data.get("algorithm_image")
-        if not allowed_images:
+        if not allowed_images or allowed_images == "":
             warn("All docker images are allowed on this Node!")
         else:
+            info("Docker image validation")
             # check if it matches any of the regex cases
             allowed_image = False
             for regex_expr in allowed_images:
@@ -100,13 +104,16 @@ def docker_wrapper(module: str):
                 if expr.match(docker_image_name):
                     allowed_image = True
             if not allowed_image:
+                info("Docker image not allowed")
                 write_output(
                     output_format,
                     {
                         "ERROR": f"Docker image {docker_image_name} is not allowed!",
                     },
                     output_file
-                )  
+                )
+                return None
+        info(f"Running docker image: {docker_image_name}")
         # Check if it's the master
         master = input_data.get("master")
         token = None
@@ -136,10 +143,6 @@ def docker_wrapper(module: str):
                     output_file
                 )
                 return None
-
-        # check algorithm whitelist - master
-        if algorithm_image not in connection_settings["allowed_algorithms"]:
-            raise RuntimeError("Algorithm not allowed!")
 
             info("Dispatching ...")
             input_data["kwargs"]["algorithm_image"] = input_data.get("algorithm_image")

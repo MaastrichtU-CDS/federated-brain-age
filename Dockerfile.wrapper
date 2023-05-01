@@ -18,9 +18,9 @@ RUN wget https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/o
 RUN mv oc kubectl /usr/local/bin/
 
 # This will install your algorithm into this image.
-COPY ./v6_wrapper/requirements.txt /requirements.txt
+COPY ./v6_wrapper/UM/requirements.txt /requirements.txt
 RUN pip install -r requirements.txt
-COPY ./v6_wrapper /app
+COPY ./v6_wrapper/UM /app
 COPY ./ /app-brain-age
 RUN pip install --no-cache-dir /app-brain-age
 RUN pip install --no-cache-dir /app

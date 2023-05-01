@@ -21,7 +21,8 @@ setup(
     packages=find_packages(),
     python_requires='>=3.6',
     install_requires=[
-        'vantage6-client',
+        'vantage6-client==1.2.3',
+        'vantage6-common==1.2.3',
         'openshift-client==1.0.13',
         'psycopg2==2.9.3',
         'tensorflow==2.8.0',
