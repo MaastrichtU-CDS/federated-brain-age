@@ -73,7 +73,8 @@ def docker_wrapper(module: str):
     # read input from the mounted inputfile.
     input_file = os.environ["INPUT_FILE"]
     info(f"Reading input file {input_file}")
-    tf_setup()
+    if os.getenv("TF_MEMORY_GROWTH_LIMIT") and os.getenv("TF_MEMORY_GROWTH_LIMIT") == True:
+        tf_setup()
     input_data = load_input(input_file)
     output_file = os.environ["OUTPUT_FILE"]
     output_format = input_data.get('output_format', None)

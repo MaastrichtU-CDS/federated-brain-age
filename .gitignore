@@ -107,5 +107,6 @@ venv.bak/
 
 # project
 /test/data/
+/test/images
 
 .DS_Store
