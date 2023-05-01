@@ -37,6 +37,10 @@ DEFAULT_HYPERPARAMETERS = {
     ROUNDS: 0,
     EARLY_STOPPING: True,
     USE_MASK: True,
+    BATCH_NORM: True,
+    LOSS: "mean_squared_error",
+    LOSS_DELTA: 10,
+    SINGLE_SCAN_BY_PATIENT: False,
 }
 
 DEFAULT_MASK_NAME = "Brain_GM_mask_1mm_MNI_kNN_conservative.nii.gz"
@@ -58,6 +62,7 @@ class BrainAge:
             training=True,
             seed=seed,
             split=split,
+            unique=self.get_parameter(SINGLE_SCAN_BY_PATIENT),
         )
         self.validation_loader = DataLoader(
             images_path,
@@ -105,41 +110,50 @@ class BrainAge:
 
             parameters: callback to retrieve the parameters.
         """
+        batch_norm = parameters(BATCH_NORM) is None or parameters(BATCH_NORM) == True
         input1 = Input(parameters(INPUT_SHAPE))
 
         c1 = Conv3D(32, kernel_size=(5,5,5), strides=(2,2,2), padding=PADDING_SAME)(input1)
-        c1 = BatchNormalization()(c1)
+        if batch_norm:
+            c1 = BatchNormalization()(c1)
         c1 = Activation(RELU)(c1)
         
         c2 = Conv3D(32, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(c1)
-        c2 = BatchNormalization()(c2)
+        if batch_norm:
+            c2 = BatchNormalization()(c2)
         c2 = Activation(RELU)(c2)
         p2 = MaxPooling3D(pool_size=(2, 2, 2))(c2)
         
         c3 = Conv3D(48, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(p2)
-        c3 = BatchNormalization()(c3)
+        if batch_norm:
+            c3 = BatchNormalization()(c3)
         c3 = Activation(RELU)(c3)
         
         c4 = Conv3D(48, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(c3)
-        c4 = BatchNormalization()(c4)
+        if batch_norm:
+            c4 = BatchNormalization()(c4)
         c4 = Activation(RELU)(c4)
         p4 = MaxPooling3D(pool_size=(2, 2, 2))(c4)
         
         c5 = Conv3D(64, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(p4)
-        c5 = BatchNormalization()(c5)
+        if batch_norm:
+            c5 = BatchNormalization()(c5)
         c5 = Activation(RELU)(c5)
         
         c6 = Conv3D(64, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(c5)
-        c6 = BatchNormalization()(c6)
+        if batch_norm:
+            c6 = BatchNormalization()(c6)
         c6 = Activation(RELU)(c6)
         p6 = MaxPooling3D(pool_size=(2, 2, 2))(c6)
 
         c7 = Conv3D(80, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(p6)
-        c7 = BatchNormalization()(c7)
+        if batch_norm:
+            c7 = BatchNormalization()(c7)
         c7 = Activation(RELU)(c7)
         
         c8 = Conv3D(80, (3,3,3), strides=(1,1,1), padding=PADDING_SAME)(c7)
-        c8 = BatchNormalization()(c8)
+        if batch_norm:
+            c8 = BatchNormalization()(c8)
         c8 = Activation(RELU)(c8)
 
         x1 = GlobalAveragePooling3D()(c8)
@@ -172,8 +186,16 @@ class BrainAge:
             epsilon = parameters(EPSILON), 
             #decay = parameters(DECAY),
         )
+        loss = parameters(LOSS)
+        if loss:
+            if loss == "huber_loss":
+                loss_delta = parameters(LOSS_DELTA)
+                loss = keras.losses.Huber(
+                    delta= loss_delta or 10.0,
+                    name='huber_loss'
+                )
         model.compile(
-            loss='mean_squared_error',
+            loss=loss,
             optimizer=adam_opt,
             metrics=['mae', 'mse']
         )
@@ -252,7 +274,14 @@ class BrainAge:
         # Train the model
         return self.model.fit(
             self.train_loader.data_generator(
-                img_size, batch_size, img_scale, mask=self.mask, mode=[], shuffle=True, crop=self.crop
+                img_size,
+                batch_size,
+                img_scale,
+                mask=self.mask,
+                mode=[],
+                shuffle=True,
+                crop=self.crop,
+                patients_per_epoch=patients_per_epoch
             ),
             steps_per_epoch = steps_per_epoch,
             epochs=self.get_parameter(EPOCHS),

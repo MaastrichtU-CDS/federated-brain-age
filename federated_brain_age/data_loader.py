@@ -9,9 +9,10 @@ from federated_brain_age.image_processing import zerocrop_img, resize_img
 from federated_brain_age.utils import read_csv
 
 class DataLoader:
-    def __init__(self, images_path, db_type, db_client, training=True, validation=False, seed=None, split=None, exclude=[]):
+    def __init__(self, images_path, db_type, db_client, training=True, validation=False, seed=None, split=None, exclude=[], unique=False):
         self.images_path = images_path
         self.seed = seed
+        self.unique = unique
         if db_type == DB_CSV:
             #data = read_csv(db_client, column_names=[ID, AGE, SEX], filter=participants, filterKey=ID)
             data = read_csv(db_client, column_names=[ID, CLINICAL_ID, IMAGING_ID, AGE, SEX, IS_TRAINING_DATA])
@@ -27,7 +28,7 @@ class DataLoader:
             dtype=str
         )
         self.clinical_data = self.clinical_data.set_index(ID)
-        self.participant_list = self.validate_participants(
+        self.participant_list, self.id_by_participant = self.validate_participants(
             list([str(id) for id in data[ID]]),
             training,
             validation
@@ -56,6 +57,7 @@ class DataLoader:
             is available.
         """
         participants_list = [[], [], [], []]
+        id_by_participant = {}
         for participant in participants:
             try:
                 if participants.count(participant) == 1:
@@ -63,9 +65,14 @@ class DataLoader:
                     # The flag 'IS_TRAINING_DATA' identifies the data that will be used for
                     # training and thus splitted between training and validation.
                     if (training or validation) == int(patient_info[IS_TRAINING_DATA]):
-                        patient_filename = str(patient_info[IMAGING_ID]).strip() + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
+                        imaging_id = str(patient_info[IMAGING_ID]).strip()
+                        clinical_id = str(patient_info[CLINICAL_ID]).strip()
+                        patient_filename = imaging_id + (os.getenv(IMAGE_SUFFIX) or DEFAULT_IMAGE_NAME)
                         if os.path.exists(os.path.join(self.images_path, patient_filename)):
                             participants_list[0].append(participant)
+                            if clinical_id not in id_by_participant:
+                                id_by_participant[clinical_id] = []
+                            id_by_participant[clinical_id].append(participant)
                         else:
                             participants_list[2].append(participant)
                 elif participant not in participants_list[3]:
@@ -74,7 +81,7 @@ class DataLoader:
                 participants_list[1].append(participant)
             except Exception as error:
                 raise Exception(f"Error validating participant {str(participant)}: {str(error)}")
-        return participants_list
+        return participants_list, id_by_participant
         
 
     def retrieve_data(self, patient_index, img_size, img_scale=1.0, mask=None, mode=[], crop=None):
@@ -174,7 +181,7 @@ class DataLoader:
 
         return ([img_data, sex_data], [label_data])
 
-    def data_generator(self, img_size, batch_size, img_scale=1.0, mask=None, mode=[], shuffle=True, crop=None):
+    def data_generator(self, img_size, batch_size, img_scale=1.0, mask=None, mode=[], shuffle=True, crop=None, patients_per_epoch=None):
         """
         Provides the inputs and the label to the convolutional network during training
         
@@ -191,7 +198,19 @@ class DataLoader:
         while 1:
             if shuffle:
                 #shuffle list/order of patients
-                pl_shuffled = random.sample(self.participants, len(self.participants))
+                if  self.unique:
+                    sublist = []
+                    for participant in self.id_by_participant.values():
+                        if len(participant) > 1:
+                            selected_scan = participant[random.randint(0, len(participant))]
+                            if selected_scan in self.participants:
+                                sublist.append(selected_scan)
+                        else:
+                            if participant[0] in self.participants:
+                                sublist.append(participant[0])
+                    pl_shuffled = random.sample(sublist, patients_per_epoch or len(sublist))
+                else:
+                    pl_shuffled = random.sample(self.participants, patients_per_epoch or len(self.participants))
                 #divide list of patients into batches
                 batch_size = int(batch_size)
                 patient_sublist = [pl_shuffled[p:p+batch_size] for p in range(0, len(pl_shuffled), batch_size)]
