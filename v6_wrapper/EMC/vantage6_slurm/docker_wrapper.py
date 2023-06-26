@@ -13,14 +13,20 @@ import subprocess
 import json
 from time import sleep
 
-import psycopg2
-
 from vantage6.tools.dispatch_rpc import dispatch_rpc
 from vantage6.tools.util import info
 from vantage6.tools import deserialization, serialization
 from vantage6.tools.data_format import DataFormat
 from vantage6.tools.exceptions import DeserializationException
 from typing import BinaryIO
+
+try:
+    import psycopg2
+except ImportError:
+    master_image = False
+else:
+    master_image = True
+
 
 _DATA_FORMAT_SEPARATOR = '.'
 _MAX_FORMAT_STRING_LENGTH = 10
@@ -190,7 +196,7 @@ def docker_wrapper(module: str):
 
     # Check if it's the master
     token = None
-    if master:
+    if master and master_image:
         info(f"Reading token file '{token_file}'")
         with open(token_file) as fp:
             token = fp.read().strip()
@@ -248,7 +254,6 @@ def docker_wrapper(module: str):
             )
             return None
 
-
         task_id = str(uuid.uuid1())
         info(f"Task id: {task_id}")
         setup_and_copy_data(conn, task_id, input_file, token_file, database_uri)
@@ -294,6 +299,7 @@ def write_output(output_format, output, output_file):
             # No output format specified, use legacy method
             fp.write(pickle.dumps(output))
 
+
 def load_input(input_file):
     """
     Try to read the specified data format and deserialize the rest of the
@@ -314,10 +320,12 @@ def load_input(input_file):
                 raise DeserializationException('Could not deserialize input')
     return input_data
 
+
 def _read_formatted(file: BinaryIO):
     data_format = str.join('', list(_read_data_format(file)))
     data_format = DataFormat(data_format.lower())
     return deserialization.deserialize(file, data_format)
+
 
 def _read_data_format(file: BinaryIO):
     """

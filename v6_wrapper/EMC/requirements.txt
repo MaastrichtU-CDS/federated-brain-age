@@ -1,0 +1,2 @@
+vantage6-client
+vantage6-common

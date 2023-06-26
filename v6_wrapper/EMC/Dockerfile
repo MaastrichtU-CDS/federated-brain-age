@@ -10,11 +10,11 @@ FROM harbor.vantage6.ai/algorithms/algorithm-base
 ARG PKG_NAME="vantage6_slurm"
 
 RUN apt-get update
-#RUN apt-get install -y apt-utils gcc libpq-dev wget iputils-ping tar
 RUN apt-get install -y wget tar ssh
 
 # This will install your algorithm into this image.
 COPY . /app
+RUN pip install -r app/requirements.txt
 RUN pip install --no-cache-dir /app
 
 # Copy ssh key and host key into container
