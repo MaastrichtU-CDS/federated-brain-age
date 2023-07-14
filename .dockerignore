@@ -15,5 +15,7 @@
 # !./v6_wrapper/*
 *.sh
 *.nii.gz
+/dsri
+/backups
 # Models
 /models

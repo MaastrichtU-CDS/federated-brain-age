@@ -51,7 +51,7 @@ RUN pip install /app
 ENV PKG_NAME=${PKG_NAME}
 
 # TODO: Temporary solution for a continous task manager running in a container
-# COPY ./v6_wrapper/ncdc_maastricht_wrapper/tasks_manager.py /mnt/temporary/tasks_manager.py
+# COPY ./v6_wrapper/UM/ncdc_maastricht_wrapper/tasks_manager.py /mnt/temporary/tasks_manager.py
 
 # Execute the docker wrapper when running the image
 CMD python -c "from federated_brain_age.docker_wrapper_v6 import docker_wrapper; docker_wrapper('${PKG_NAME}')"
