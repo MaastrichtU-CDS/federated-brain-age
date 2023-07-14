@@ -30,7 +30,7 @@ setup(
         'nibabel==3.2.2',
         'numpy==1.21.5',
         'scipy==1.7.3',
-        'xnat==0.4.1'
+        'xnat==0.4.1',
     ]
     # ,
     # extras_require={
