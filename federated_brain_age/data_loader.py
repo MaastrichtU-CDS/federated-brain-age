@@ -1,19 +1,21 @@
-import pandas as pd
-import numpy as np
-import nibabel as nib
-import random
 import os
+import random
+
+import nibabel as nib
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import KFold
 
 from federated_brain_age.constants import *
 from federated_brain_age.image_processing import zerocrop_img, resize_img
 from federated_brain_age.utils import read_csv
 
 class DataLoader:
-    def __init__(self, images_path, db_type, db_client, training=True, validation=False, seed=None, split=None, exclude=[]):
+    def __init__(self, images_path, db_type, db_client, training=True, validation=False, seed=None,
+                 split=None, exclude=[], kfold=0, k=0):
         self.images_path = images_path
         self.seed = seed
         if db_type == DB_CSV:
-            #data = read_csv(db_client, column_names=[ID, AGE, SEX], filter=participants, filterKey=ID)
             data = read_csv(db_client, column_names=[ID, CLINICAL_ID, IMAGING_ID, AGE, SEX, IS_TRAINING_DATA])
         elif db_type == DB_POSTGRES:
             # TODO: Query the database to obtain the data.
@@ -38,14 +40,24 @@ class DataLoader:
         self.participants = []
         if len(self.participant_list[0]) > 0:
             if training:
-                self.participants = [
-                    self.participant_list[0][i] for i in sorted(
-                        random.sample(
-                            list(range(0, len(self.participant_list[0]))),
-                            int(len(self.participant_list[0]) * (split or DEFAULT_SPLIT)),
+                if kfold > 1:
+                    kf = KFold(n_splits=kfold, shuffle=True, random_state=random.randint(0, 1000000))
+                    for i, (train_index, _) in enumerate(kf.split(self.participant_list[0])):
+                        if i == k:
+                            self.participants = [
+                                participant for index, participant in \
+                                    enumerate(self.participant_list[0]) if index in train_index
+                                ]
+                            break
+                else:
+                    self.participants = [
+                        self.participant_list[0][i] for i in sorted(
+                            random.sample(
+                                list(range(0, len(self.participant_list[0]))),
+                                int(len(self.participant_list[0]) * (split or DEFAULT_SPLIT)),
+                            )
                         )
-                    )
-                ]
+                    ]
             else:
                 self.participants = [
                     participant for participant in self.participant_list[0] if participant not in exclude

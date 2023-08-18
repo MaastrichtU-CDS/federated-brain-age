@@ -37,6 +37,8 @@ DEFAULT_HYPERPARAMETERS = {
     ROUNDS: 0,
     EARLY_STOPPING: True,
     USE_MASK: True,
+    KFOLD: 0,
+    K: 0,
 }
 
 DEFAULT_MASK_NAME = "Brain_GM_mask_1mm_MNI_kNN_conservative.nii.gz"
@@ -58,6 +60,8 @@ class BrainAge:
             training=True,
             seed=seed,
             split=split,
+            kfold=self.get_parameter(KFOLD),
+            k=self.get_parameter(K),
         )
         self.validation_loader = DataLoader(
             images_path,
@@ -68,6 +72,8 @@ class BrainAge:
             seed=seed,
             split=split,
             exclude=self.train_loader.participants,
+            kfold=self.get_parameter(KFOLD),
+            k=self.get_parameter(K),
         )
         steps_per_epoch = int(math.ceil(float(min(
             self.get_parameter(PATIENTS_PER_EPOCH), len(self.train_loader.participants)

@@ -75,6 +75,8 @@ SEED = "seed"
 DATA_SEED = "data_seed"
 DATA_SPLIT = "data_split"
 DEFAULT_SPLIT = 0.8
+KFOLD = "kfold"
+K = "k"
 
 # Hyperparameters - Master
 ROUNDS = "ROUNDS"
