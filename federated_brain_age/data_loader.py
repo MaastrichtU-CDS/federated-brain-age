@@ -12,9 +12,10 @@ from federated_brain_age.utils import read_csv
 
 class DataLoader:
     def __init__(self, images_path, db_type, db_client, training=True, validation=False, seed=None,
-                 split=None, exclude=[], kfold=0, k=0):
+                 split=None, exclude=[], kfold=0, k=0, unique=False):
         self.images_path = images_path
         self.seed = seed
+        self.unique = unique
         if db_type == DB_CSV:
             data = read_csv(db_client, column_names=[ID, CLINICAL_ID, IMAGING_ID, AGE, SEX, IS_TRAINING_DATA])
         elif db_type == DB_POSTGRES:
@@ -186,7 +187,7 @@ class DataLoader:
 
         return ([img_data, sex_data], [label_data])
 
-    def data_generator(self, img_size, batch_size, img_scale=1.0, mask=None, mode=[], shuffle=True, crop=None):
+    def data_generator(self, img_size, batch_size, img_scale=1.0, mask=None, mode=[], shuffle=True, crop=None, patients_per_epoch=None):
         """
         Provides the inputs and the label to the convolutional network during training
         
@@ -203,7 +204,19 @@ class DataLoader:
         while 1:
             if shuffle:
                 #shuffle list/order of patients
-                pl_shuffled = random.sample(self.participants, len(self.participants))
+                if  self.unique:
+                    sublist = []
+                    for participant in self.id_by_participant.values():
+                        if len(participant) > 1:
+                            selected_scan = participant[random.randint(0, len(participant) - 1)]
+                            if selected_scan in self.participants:
+                                sublist.append(selected_scan)
+                        else:
+                            if participant[0] in self.participants:
+                                sublist.append(participant[0])
+                    pl_shuffled = random.sample(sublist, patients_per_epoch or len(sublist))
+                else:
+                    pl_shuffled = random.sample(self.participants, patients_per_epoch or len(self.participants))
                 #divide list of patients into batches
                 batch_size = int(batch_size)
                 patient_sublist = [pl_shuffled[p:p+batch_size] for p in range(0, len(pl_shuffled), batch_size)]
@@ -214,7 +227,7 @@ class DataLoader:
             data = []
             for batch in range(0, len(patient_sublist)):
                 #get the data of a batch samples/patients
-                data.append(self.generate_batch(patient_sublist[batch], img_size, img_scale, mask, mode, crop))
+                data.append(self.generate_batch(patient_sublist[batch], img_size, img_scale, mask, mode, crop, down_size=self.down_size))
                 count = count + len(patient_sublist[batch])
                 #yield the data and pop for memory clearing
                 yield data.pop()

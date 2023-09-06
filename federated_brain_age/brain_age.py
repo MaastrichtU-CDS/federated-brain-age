@@ -62,6 +62,7 @@ class BrainAge:
             split=split,
             kfold=self.get_parameter(KFOLD),
             k=self.get_parameter(K),
+            unique=self.get_parameter(SINGLE_SCAN_BY_PATIENT),
         )
         self.validation_loader = DataLoader(
             images_path,
@@ -258,7 +259,14 @@ class BrainAge:
         # Train the model
         return self.model.fit(
             self.train_loader.data_generator(
-                img_size, batch_size, img_scale, mask=self.mask, mode=[], shuffle=True, crop=self.crop
+                img_size,
+                batch_size,
+                img_scale,
+                mask=self.mask,
+                mode=[],
+                shuffle=True,
+                crop=self.crop,
+                patients_per_epoch=patients_per_epoch,
             ),
             steps_per_epoch = steps_per_epoch,
             epochs=self.get_parameter(EPOCHS),
