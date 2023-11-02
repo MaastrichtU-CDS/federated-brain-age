@@ -6,20 +6,11 @@ from vantage6.tools.util import warn, info
 
 from federated_brain_age.constants import *
 from federated_brain_age.db_builder import get_model_by_id, get_last_run_by_id, get_run_by_id_round
-from federated_brain_age.utils import validate_parameters, parse_error, np_array_to_list
+from federated_brain_age.utils import np_array_to_list
 
 def get_weights(parameters, db_client):
     """ Get model weights by id and round
     """
-    # Validate the input
-    missing_parameters = validate_parameters(parameters, {
-        DB_TYPE: {},
-        MODEL_ID: {}
-    })
-    if len(missing_parameters) > 0:
-        return parse_error(
-            f"Missing the following parameters: {', '.join(missing_parameters)}"
-        )
     # Retrieve the necessary data from the database
     model_info = {
         ID: None,

@@ -13,57 +13,9 @@ from federated_brain_age.utils import *
 from federated_brain_age.data_loader import DataLoader
 from federated_brain_age.db_builder import *
 from federated_brain_age.task_get_weights import get_weights
-
-def get_orgarnization(client, org_ids):
-    # obtain organizations that are within the collaboration
-    info("Obtaining the organizations in the collaboration")
-    organizations = [organization for organization in client.get_organizations_in_my_collaboration() if \
-        not org_ids or organization.get("id") in org_ids]
-    return organizations 
-
-def execute_task(client, input, org_ids, algorithm_image = None):
-    # collaboration and image are stored in the key, so we do not need
-    # to specify these
-    info(f"Creating node tasks for organization(s): {', '.join([str(org_id) for org_id in org_ids])}")
-    if algorithm_image is not None:
-        input["algorithm_image"] = algorithm_image
-    task = client.create_new_task(
-        input,
-        organization_ids=org_ids
-    )
-    task_id = task.get("id")
-    print(f"Task id: {str(task_id)}")
-    return task_id
-
-def get_result(client, tasks, max_number_tries=DEFAULT_MAX_NUMBER_TRIES, sleep_time=60):
-    # Get the task's result
-    results = {}
-    tries = 0
-    while len(results.keys()) < len(tasks) and tries <= max_number_tries:
-        # TODO: Set a better value for the timerz
-        time.sleep(sleep_time)
-        tries += 1
-        for task_id in tasks.keys():
-            if task_id not in results.keys():
-                info(f"Waiting for results: {task_id}")
-                task = client.request(f"task/{task_id}")
-                if task.get("complete"):
-                    info("Obtaining results")
-                    task_results = client.get_results(task_id=task.get("id"))
-                    if task_results and len(task_results) == 1 and \
-                        type(task_results[0]) is dict and len(task_results[0].keys()) > 0:
-                        results[task_id] = task_results[0]
-                    else:
-                        results[task_id] = {
-                            ERROR: "Task didn't return a result"
-                        }   
-    # Check the tasks that didn't complete in time
-    for task_id in tasks.keys():
-        if task_id not in results:
-            results[task_id] = {
-                ERROR: "Task did not complete in time"
-            }
-    return results
+from federated_brain_age.task_check import check_centers
+from federated_brain_age.server_handler import get_orgarnization
+from federated_brain_age.task_predict import predict
 
 def master(client, db_client, parameters = None, org_ids = None, algorithm_image = None):
     """
@@ -98,47 +50,6 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
     # Check which task has been requested
     info(f"Task requested: {parameters[TASK]}")
     if parameters[TASK] == GET_MODEL:
-        return get_weights(parameters, db_client)
-    elif parameters[TASK] == CHECK:
-        # Validate the input
-        missing_parameters = validate_parameters(parameters, {DB_TYPE: {}})
-        if len(missing_parameters) > 0:
-            return parse_error(
-                f"Missing the following parameters: {', '.join(missing_parameters)}"
-            )
-        # Send the tasks
-        tasks = {}
-        for id in ids:
-            input = {
-                "method": CHECK,
-                "args": [],
-                "kwargs": {
-                    "parameters": {
-                        **parameters,
-                        # TRAINING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
-                        # VALIDATION_IDS: parameters[MODEL][NODE][VALIDATION_IDS][id],
-                        # TESTING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
-                    },
-                },
-            }
-            task_id = execute_task(client, input, [id], algorithm_image)
-            tasks[task_id] = {
-                ORGANIZATION_ID: id
-            }
-        output = get_result(
-            client,
-            tasks,
-            max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES,
-            sleep_time=parameters.get(SLEEP_TIME) or DEFAULT_SLEEP_TIME,
-        )
-        return {
-            CHECK: [{
-                ORGANIZATION_ID: tasks[key],
-                RESULT: result,
-                } for key, result in output.items()]
-            }
-    elif parameters[TASK] == PREDICT:
-        # Validate the input
         missing_parameters = validate_parameters(parameters, {
             DB_TYPE: {},
             MODEL_ID: {}
@@ -147,80 +58,24 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
             return parse_error(
                 f"Missing the following parameters: {', '.join(missing_parameters)}"
             )
-        # Retrieve the necessary data from the database
-        model_info = {
-            ID: None,
-            SEED: None,
-            ROUND: 0,
-            WEIGHTS: None,
-            DATA_SPLIT: None,
-        }
-        info("Request to save the model")
-        model_info[ID] = parameters[MODEL_ID]
-        try:
-            result = get_model_by_id(parameters[MODEL_ID], db_client)
-            if result:
-                info("Get existing model")
-                model_info[SEED] = result[2]
-                model_info[DATA_SPLIT] = result[3]
-                last_run = get_run_by_id_round(parameters[MODEL_ID], parameters[ROUND], db_client) if \
-                    ROUND in parameters else get_last_run_by_id(parameters[MODEL_ID], db_client)
-                if last_run:
-                    model_info[ROUND] = last_run[3]
-                    model_info[WEIGHTS] = last_run[4]
-            else:
-                error_message = f"Unable to find the model with ID: {str(parameters[MODEL_ID])}"
-                warn(error_message)
-                return {
-                    ERROR: error_message
-                }
-        except Exception as error:
-            error_message = f"Unable to connect to the database and retrieve the model: {str(error)}"
-            warn(error_message)
-            return {
-                ERROR: error_message
-            }
-        # Set the seed value
-        info(f"Using {model_info[SEED]} as the seed")
-        random.seed(model_info[SEED])
-        # Set 3 constant seeds for the training/validation split
-        data_seeds = [random.randint(0, 1000000) for j in range(len(ids))]
-        # Send the tasks
-        tasks = {}
-        for org_num, id in enumerate(ids):
-            input = {
-                "method": PREDICT,
-                "args": [],
-                    "kwargs": {
-                        "parameters": {
-                            ROUNDS: model_info[ROUND],
-                            HISTORY: parameters.get(HISTORY),
-                            MODEL_ID: parameters.get(MODEL_ID),
-                            DB_TYPE: parameters.get(DB_TYPE),
-                            IS_TRAINING_DATA: parameters.get(IS_TRAINING_DATA),
-                        },
-                        WEIGHTS: json.dumps(np_array_to_list(model_info[WEIGHTS])),
-                        DATA_SEED: data_seeds[org_num],
-                        SEED: data_seeds[org_num],
-                        DATA_SPLIT: 1 if int(parameters.get(DATA_SPLIT)) == 1 else model_info[DATA_SPLIT],
-                    }
-            }
-            task_id = execute_task(client, input, [id], algorithm_image)
-            tasks[task_id] = {
-                ORGANIZATION_ID: id
-            }
-        output = get_result(
-            client,
-            tasks,
-            max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES,
-            sleep_time=parameters.get(SLEEP_TIME) or DEFAULT_SLEEP_TIME,
-        )
-        return {
-            PREDICT: [{
-                ORGANIZATION_ID: tasks[key],
-                RESULT: result,
-                } for key, result in output.items()]
-            }
+        return get_weights(parameters, db_client)
+    elif parameters[TASK] == CHECK:
+        missing_parameters = validate_parameters(parameters, {DB_TYPE: {}})
+        if len(missing_parameters) > 0:
+            return parse_error(
+                f"Missing the following parameters: {', '.join(missing_parameters)}"
+            )
+        return check_centers(parameters,ids, algorithm_image, client)
+    elif parameters[TASK] == PREDICT:
+        missing_parameters = validate_parameters(parameters, {
+            DB_TYPE: {},
+            MODEL_ID: {}
+        })
+        if len(missing_parameters) > 0:
+            return parse_error(
+                f"Missing the following parameters: {', '.join(missing_parameters)}"
+            )
+        return predict(parameters, ids, algorithm_image, db_client, client)
     elif parameters[TASK] == TRAIN:
         # Validate the input
         missing_parameters = validate_parameters(parameters, {
