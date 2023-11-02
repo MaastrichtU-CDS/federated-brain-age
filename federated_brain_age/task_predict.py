@@ -1,4 +1,4 @@
-""" Handle the task to predict the brain age
+""" Handle the master and node tasks to predict the brain age
 """
 import json
 import random

@@ -1,4 +1,4 @@
-""" Task: get model weights by id and round
+""" Handle the task to get model weights by id and round (master only)
 """
 import json
 

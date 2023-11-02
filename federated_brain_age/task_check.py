@@ -1,4 +1,4 @@
-""" Task: check if the settings are correct in each center
+""" Handle the master and node tasks to check the settings
 """
 
 from federated_brain_age.constants import *
