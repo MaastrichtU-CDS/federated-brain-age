@@ -8,6 +8,7 @@ from vantage6.tools.util import warn, info
 from federated_brain_age.constants import *
 from federated_brain_age.db_builder import get_last_run_by_id, get_run_by_id_round, get_model_by_id
 from federated_brain_age.server_handler import execute_task, get_result
+from federated_brain_age.utils import np_array_to_list
 
 def predict(parameters, ids, algorithm_image, db_client, client):
     """ Send the task to predict the brain age

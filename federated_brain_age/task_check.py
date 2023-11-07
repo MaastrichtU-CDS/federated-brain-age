@@ -14,9 +14,6 @@ def check_centers(parameters, ids, algorithm_image, client):
             "kwargs": {
                 "parameters": {
                     **parameters,
-                    # TRAINING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
-                    # VALIDATION_IDS: parameters[MODEL][NODE][VALIDATION_IDS][id],
-                    # TESTING_IDS: parameters[MODEL][NODE][TRAINING_IDS][id],
                 },
             },
         }

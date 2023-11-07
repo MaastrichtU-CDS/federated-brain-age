@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 from vantage6.tools.util import warn, info
 
-from federated_brain_age.brain_age import BrainAge, DEFAULT_HYPERPARAMETERS
+from federated_brain_age.brain_age import BrainAge
 from federated_brain_age.constants import *
 from federated_brain_age.utils import *
 from federated_brain_age.data_loader import DataLoader
