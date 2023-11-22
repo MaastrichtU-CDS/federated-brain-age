@@ -204,7 +204,7 @@ class BrainAge:
             # img_size = np.array(np.array(zerocrop_img(self.mask, padding=self.get_parameter(USE_PADDING))).shape)
         else:
             # TODO: Getting the first scan may require some changes in the data folder path
-            img_size = np.array(np.array(nib.load(self.images_path + os.listdir(self.images_path)[0]).get_data()).shape)
+            img_size = np.array(np.array(nib.load(os.path.join(self.images_path, os.listdir(self.images_path)[0])).get_data()).shape)
         return [int(math.ceil(img_d)) for img_d in img_size * self.get_parameter(IMG_SCALE)]
     
     def save_model(self, suffix=""):
