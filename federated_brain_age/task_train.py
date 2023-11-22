@@ -1,6 +1,7 @@
 """ Handle the master and node tasks to train the brain age model
 """
 import json
+import os
 import random
 
 import numpy as np
@@ -251,3 +252,154 @@ def task_train(parameters, ids, algorithm_image, db_client, client):
         results[WEIGHTS] = brain_age_weights
     info("Send the output")
     return results
+
+def task_train_locally(parameters, weights, data_seed, data_split, seed, db_client):
+    output = {
+        METRICS: {},
+        HISTORY: {},
+        PREDICTIONS: {},
+        AGE_GAP: {},
+    }
+    # Retrieve the data from XNAT if necessary
+    # data_path = os.path.join(os.getenv(DATA_FOLDER), parameters[MODEL_ID])
+    # if ...:
+    #     # Check if the folder exists and if the data is already there
+    #     # folder_exists(data_path)
+    # else:
+    #     if os.getenv(XNAT_URL):
+    #         retrieve_data(data_path)
+    #     else:
+    #         return {
+    #             ERROR: ""
+    #         }
+    try:
+        # Initialize the model
+        info("Initialize")
+        brain_age = BrainAge(
+            parameters,
+            parameters[MODEL_ID],
+            os.getenv(IMAGES_FOLDER),
+            parameters[DB_TYPE],
+            db_client if parameters[DB_TYPE] != DB_CSV else os.getenv(DATA_FOLDER) + "/dataset.csv",
+            # parameters[TRAINING_IDS],
+            # parameters[VALIDATION_IDS],
+            seed=data_seed,
+            split=data_split,
+        )
+        info("Check participants")
+        participants_by_subset = {
+            TRAIN: brain_age.train_loader.participant_list,
+            VALIDATION: brain_age.validation_loader.participant_list,
+        }
+        for subset, subset_participants in participants_by_subset.items():
+            if len(subset_participants[1]) > 0:
+                warn(f"{str(len(subset_participants[1]))} of {subset} participants with incomplete " +
+                    f"information: {', '.join([str(participant) for participant in subset_participants[1]])}")
+            if len(subset_participants[2]) > 0:
+                warn(f"{str(len(subset_participants[2]))} of {subset} participants without imaging " +
+                    f"data available: {', '.join([str(participant) for participant in subset_participants[2]])}")
+            if len(subset_participants[3]) > 0:
+                warn(f"{str(len(subset_participants[3]))} of {subset} participants with duplicate information " +
+                    f"data available: {', '.join([str(participant) for participant in subset_participants[3]])}")
+        output[SAMPLE_SIZE] = [
+            len(brain_age.train_loader.participants), len(brain_age.validation_loader.participants)
+        ]
+        if len(brain_age.train_loader.participants) > 0:
+            if weights:
+                # Set the initial weights if available
+                parsed_weights = [
+                    np.array(weights_by_layer, dtype=np.double) for weights_by_layer in json.loads(weights)
+                ]
+                brain_age.model.set_weights(parsed_weights)
+            info("Predictions with the aggregated network")
+            output[PREDICTIONS] = brain_age.predict()
+            metrics = [
+                brain_age.get_metrics(
+                    brain_age.train_loader,
+                    list(output[PREDICTIONS][TRAIN].values()),
+                ),
+                brain_age.get_metrics(
+                    brain_age.validation_loader,
+                    list(output[PREDICTIONS][VALIDATION].values()),
+                    prefix="val_",
+                ),
+            ]
+            output[AGE_GAP] = {
+                AGE_GAP: metrics[0].get(AGE_GAP, []),
+                VAL_AGE_GAP: metrics[1].get(VAL_AGE_GAP, []),
+            }
+            info("Training the network")
+            # Set the random seed
+            random.seed(seed)
+            # Train the model - history is necessary for model selection
+            history = parameters.get(HISTORY)
+            model_selection = parameters.get(MODEL_SELECTION)
+            result = brain_age.train(
+                history=history or model_selection,
+                class_weight=parameters.get(CLASS_WEIGHTS),
+                save_model=parameters.get(SAVE_MODEL),
+                complete_metrics=parameters.get(COMPLETE_METRICS, True),
+            )
+            # Retrieve the weights, metrics for the first and last epoch, and the 
+            # history if requested
+            info("Retrieve the results")
+            if model_selection:
+                info("Model selection requested")
+                output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.history.best_model))
+            else:
+                output[WEIGHTS] = json.dumps(np_array_to_list(brain_age.model.get_weights()))
+            # Calculate the metrics
+            if history:
+                epoch = brain_age.history.best_epoch if model_selection else -1
+                metrics.extend([
+                    {
+                        MAE: brain_age.history.train_metrics[MAE][epoch],
+                        MSE: brain_age.history.train_metrics[MSE][epoch],
+                        SDAE: brain_age.history.train_metrics[SDAE][epoch],
+                        SDSE: brain_age.history.train_metrics[SDSE][epoch],
+                    },
+                    {
+                        VAL_MAE: brain_age.history.val_metrics[MAE][epoch],
+                        VAL_MSE: brain_age.history.val_metrics[MSE][epoch],
+                        VAL_SDAE: brain_age.history.val_metrics[SDAE][epoch],
+                        VAL_SDSE: brain_age.history.val_metrics[SDSE][epoch],
+                    },
+                ])
+            else:
+                local_predictions = brain_age.predict()
+                metrics.extend([
+                    brain_age.get_metrics(
+                        brain_age.train_loader,
+                        list(local_predictions[TRAIN].values()),
+                    ),
+                    brain_age.get_metrics(
+                        brain_age.validation_loader,
+                        list(local_predictions[VALIDATION].values()),
+                        prefix="val_",
+                    ),
+                ])
+            output[METRICS] = {
+                key: [metric[key] for metric in metrics if key in metric] for key in [
+                    MAE, MSE, SDAE, SDSE, VAL_MAE, VAL_MSE, VAL_SDAE, VAL_SDSE,
+                ]
+            }
+            # Metrics from the augmented data
+            # for metric in result.history.keys():
+            #     output[METRICS][metric] = [result.history[metric][0], result.history[metric][-1]]
+            if history:
+                # Tensorflow history is an average of the results by batch
+                # except for the validation metrics (result.history[VAL_MSE])
+                # output[HISTORY] = result.history
+                output[HISTORY] = {
+                    MAE: brain_age.history.train_metrics[MAE],
+                    MSE: brain_age.history.train_metrics[MSE],
+                    VAL_MAE: brain_age.history.val_metrics[MAE],
+                    VAL_MSE: brain_age.history.val_metrics[MSE],
+                }
+        else:
+            raise Exception("No participants found for the training set")
+    except Exception as error:
+       message = f"Error while training the model: {str(error)}"
+       warn(message)
+       output[ERROR] = message
+    return output
