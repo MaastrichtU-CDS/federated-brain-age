@@ -8,3 +8,7 @@ Leiden and Rotterdam: https://git.lumc.nl/dcats/vantage6_slurm/-/blob/master/van
 ## UM wrapper
 
 Developed to interact with the local GPU/CPU cluster managed through an openshift platform.
+
+## LUMC and RS
+
+Developed to interact with the local GPU/CPU cluster via SLURM.
