@@ -34,6 +34,7 @@ ids = df_subset['id'].values
 # Calculate the age at  the MRI visit
 # https://demaastrichtstudie.app/data-dictionary/
 # MRI_lagtime: Time between third visit and MRI (years; Brain and/or Abdomen)
+# Calculation: (datum_v4 - VISIT3_date) / (365.25 * time.days(1))
 age = (df_subset["age"] + ((df_subset["VISIT3_DATE"] - df_subset["VISIT1_DATE"]).dt.days)/365.25 + df_subset["MRI_lagtime"].fillna(0)).values
 sex = df_subset['sex'].values
 diabetes = df_subset['diabetes'].values
