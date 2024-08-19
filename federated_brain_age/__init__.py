@@ -114,19 +114,20 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
             WEIGHTS: None,
             DATA_SPLIT: None,
         }
-        info("Request to save the model")
+        info("Get model")
         model_info[ID] = parameters[MODEL_ID]
         try:
             result = get_model_by_id(parameters[MODEL_ID], db_client)
             if result:
-                info("Get existing model")
+                info("Model found")
                 model_info[SEED] = result[2]
                 model_info[DATA_SPLIT] = result[3]
                 last_run = get_run_by_id_round(parameters[MODEL_ID], parameters[ROUND], db_client) if \
                     ROUND in parameters else get_last_run_by_id(parameters[MODEL_ID], db_client)
                 if last_run:
+                    info("Run found: parsing the weights")
                     model_info[ROUND] = last_run[3]
-                    model_info[WEIGHTS] = last_run[4]
+                    model_info[WEIGHTS] = json.dumps(np_array_to_list(last_run[4]))
             else:
                 error_message = f"Unable to find the model with ID: {str(parameters[MODEL_ID])}"
                 warn(error_message)
@@ -139,17 +140,7 @@ def master(client, db_client, parameters = None, org_ids = None, algorithm_image
             return {
                 ERROR: error_message
             }
-        # Set the seed value
-        info(f"Using {model_info[SEED]} as the seed")
-        random.seed(model_info[SEED])
-        # Set 3 constant seeds for the training/validation split
-        data_seeds = [random.randint(0, 1000000) for j in range(len(ids))]
-        return {
-            WEIGHTS: [{
-                ORGANIZATION_ID: tasks[key],
-                RESULT: result,
-                } for key, result in output.items()]
-            }
+        return model_info[WEIGHTS]
     elif parameters[TASK] == CHECK:
         # Validate the input
         missing_parameters = validate_parameters(parameters, {DB_TYPE: {}})
