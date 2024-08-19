@@ -57,19 +57,27 @@ class ConnectionSettings:
         self.bind_model_folder = connection_settings["singularity_bind_model_folder"]
 
     def check_algorithm_whitelist(self, algorithm_image: str):
+        print(algorithm_image)
+        print(self.allowed_algorithms)
         if algorithm_image not in self.allowed_algorithms:
-            raise RuntimeError("Algorithm not allowed!")
+            return False
+        return True
 
 
 def check_status(job_id: str, user: str, login_node: str) -> bool:
-    command = ["ssh", f"{user}@{login_node}", "sacct", "-j", job_id, "--format", "State"]
+    command = ["ssh", f"{user}@{login_node}", "sacct", "-j", str(job_id), "--format", "State"]
     status_check = subprocess.run(command, capture_output=True)
+    print(status_check.returncode)
     print(status_check.stdout)
+    print(status_check.stderr)
     info("Within check status")
     if status_check.returncode != 0:
         # retry in a minute
         sleep(60)
         status_check = subprocess.run(command, capture_output=True)
+        print(status_check.returncode)
+        print(status_check.stdout)
+        print(status_check.stderr)
         if status_check.returncode != 0:
             raise RuntimeError("Unable to check status!")
     status = status_check.stdout.split()
@@ -120,7 +128,7 @@ def submit_job(conn: ConnectionSettings, task_id: str, algorithm_image: str):
     else:
         pass
 
-    slurm_command = ["sbatch", f"--partitions={conn.partitions}", node_part, node_exclude_part,
+    slurm_command = ["sbatch", f"--partition={conn.partitions}", node_part, node_exclude_part,
                      f"--job-name=pht_{task_id}",
                      f"--export-file={conn.env_file}",
                      f"--chdir={conn.workdir_prefix}/{task_id}", "--time=1440", "--cpus-per-task=1",
@@ -130,6 +138,7 @@ def submit_job(conn: ConnectionSettings, task_id: str, algorithm_image: str):
                            + "--containall "
                            + "--env INPUT_FILE=/INPUT,OUTPUT_FILE=/OUTPUT,TOKEN_FILE=/TOKEN,DATABASE_URI=/DATA "
                            + "--env LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu "
+                           + "--env CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES "
                            + f"--env-file {conn.env_file} "
                            + "--nv "
                            + f"--bind INPUT:/INPUT,OUTPUT:/OUTPUT,DATA:/DATA,TOKEN:/TOKEN,"
@@ -145,7 +154,9 @@ def submit_job(conn: ConnectionSettings, task_id: str, algorithm_image: str):
     print(submission.stderr)
     if submission.returncode != 0:
         raise RuntimeError("Job submission failed!")
-    job_id = str(submission.stdout.split()[-1])
+    job_id = submission.stdout.split()[-1]
+    job_id = job_id.decode('utf-8')
+
     return job_id
 
 
@@ -222,6 +233,7 @@ def docker_wrapper(module: str):
             return None
 
         info("Dispatching ...")
+        print(input_data.get("algorithm_image"))
         input_data["kwargs"]["algorithm_image"] = input_data.get("algorithm_image")
         output = dispatch_rpc(
             db_client,

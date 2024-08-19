@@ -11,7 +11,13 @@ Copy the host fingerprint into the known_hosts file and fill in the connection_s
     "slurm_workdir_prefix": "The path to the directory (in the slurm cluster) inside of which the tasks will be run.",
     "slurm_singularity_exe": "The path to the singularity executable (on the slurm cluster).",
     "slurm_partitions": "The partitions used to submit the jobs to on the slurm cluster.",
-    "slurm_env_file": "A file (on the slurm cluster) containing additional environment variables (eg. XNAT credentials) to be used inside the singularity instances."
+    "slurm_env_file": "A file (on the slurm cluster) containing additional environment variables (eg. XNAT credentials) to be used inside the singularity instances.",
+    "slurm_node": "Nodes to select with --nodelist",
+    "slurm_node_exclude": "Nodes to exclude with --exclude",
+    "singularity_bind_data_folder": "Folder where dataset.csv is found",
+    "singularity_bind_images_folder": "Folder where the images are found",
+    "singularity_bind_model_folder": "Folder the model can be found",
+    "allowed_algorithms": ["pmateus/brain-age-gpu:1.0.88"]
 }
 ```
 
