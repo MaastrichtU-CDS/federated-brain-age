@@ -1,0 +1,15 @@
+{
+    "slurm_login_node": "",
+    "slurm_user_name": "",
+    "slurm_workdir_prefix": "",
+    "slurm_singularity_exe": "",
+    "slurm_partitions": "",
+    "slurm_env_file": "",
+    "slurm_node": "",
+    "slurm_node_exclude": "",
+    "allowed_algorithms": [],
+    "singularity_bind_data_folder": "",
+    "singularity_bind_images_folder": "",
+    "singularity_bind_model_folder": ""
+}
+

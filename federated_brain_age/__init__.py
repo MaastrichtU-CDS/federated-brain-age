@@ -555,7 +555,7 @@ def RPC_check(db_client, parameters, org_ids = None):
     output[IMAGES_FOLDER] = {}
     images_path = os.getenv(IMAGES_FOLDER)
     if images_path and os.path.isdir(images_path):
-        scans = [f for f in os.path.listdir(images_path) if os.path.isfile(os.path.join(images_path, f))]
+        scans = [f for f in os.listdir(images_path) if os.path.isfile(os.path.join(images_path, f))]
         output[IMAGES_FOLDER][NUMBER_SCANS] = len(scans)
         # missing = []
         # if TRAINING_IDS in parameters or VALIDATION_IDS in parameters:

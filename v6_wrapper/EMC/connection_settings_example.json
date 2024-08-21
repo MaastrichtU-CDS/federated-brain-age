@@ -1,0 +1,14 @@
+{
+    "slurm_login_node": "<URL>",
+    "slurm_user_name": "<username>",
+    "slurm_workdir_prefix": "",
+    "slurm_singularity_exe": "/usr/bin/singularity",
+    "slurm_partitions": "",
+    "slurm_node": "<leave empty if not required>",
+    "slurm_node_exclude": "<leave empty if not required>",
+    "slurm_env_file": "",
+    "singularity_bind_data_folder": "",
+    "singularity_bind_images_folder": "",
+    "singularity_bind_model_folder": "",
+    "allowed_algorithms": ["pmateus/brain-age-gpu:1.0.88"]
+}
