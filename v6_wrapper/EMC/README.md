@@ -21,11 +21,15 @@ Copy the host fingerprint into the known_hosts file and fill in the connection_s
 }
 ```
 
-Then build the docker image:
+Then build the docker images by running the following commands from the root of the repository:
 ```bash 
-chmod 600 id_rsa
-docker build . --tag vantage6_slurm:0.1.0
+chmod 600 ./v6_wrapper/EMC/id_rsa
+docker build --tag vantage6_slurm:0.1.0 -f v6_wrapper/EMC/Dockerfile .
+docker build --tag vantage6_slurm_master:0.1.0 -f v6_wrapper/EMC/Dockerfile.master .
 ```
+
+Using the image from Dockerfile.master will allow you to use a node as a master node as well as a regular node. 
+The image from the other Dockerfile only allows the node to operate as a non-master node.
 
 Make the node configuration as usual then add the following section to the relevant environment:
 
@@ -36,7 +40,7 @@ environments:
     test:
         ...
         docker_images_placeholders:
-            gpu_image: vantage6_slurm:0.1.0
+            gpu_image: vantage6_slurm:0.1.0 # Or vantage6_slurm_master:0.1.0
 ```
 
 In order for this to work, you will need a special version of vantage6-node: pmateus/vantage6-node-whitelisted:2.0.0 
