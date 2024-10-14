@@ -1,0 +1,50 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+      "name": "pod-name",
+      "labels": {
+        "app": "app-name"
+      },
+      "namespace": "project"
+    },
+    "spec": {
+      "volumes": [
+        {
+          "name": "data",
+          "persistentVolumeClaim": {
+            "claimName": "persistent-volume-name"
+          }
+        }
+      ],
+      "containers": [
+        {
+          "name": "container-name",
+          "image": "domain/brain-age-gpu:x.y.z",
+          "command": [],
+          "volumeMounts": [
+            {
+              "name": "data",
+              "mountPath": "/mnt/data"
+            }
+          ],
+          "resources": {
+            "requests": {
+              "nvidia.com/gpu": 1
+            },
+            "limits": {
+              "nvidia.com/gpu": 1
+            }
+          },
+          "envFrom": [
+            {
+              "configMapRef": {
+                "name": "config-map-name"
+              }
+            }
+          ]
+        }
+      ],
+      "restartPolicy": "Never"
+    }
+  }
