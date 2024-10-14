@@ -15,7 +15,7 @@ ba_test_gap = json.load(open('./file4.json'))
 
 def calculate_age(brain_age, age_gap):
     for id in brain_age.keys():
-        ages_train.append(brain_age[id] - age_gap[id])
+        ages_train.append(brain_age[id] + age_gap[id])
 
 def apply_linear_correction(reg, brain_age, ages):
     predicted_age_corrected = []
@@ -25,7 +25,7 @@ def apply_linear_correction(reg, brain_age, ages):
     ids = list(brain_age.keys())
     for i in range(len(brain_age.keys())):
         id = ids[i]
-        age_corrected = brain_age[id] - correction[i]
+        age_corrected = brain_age[id] + correction[i]
         predicted_age_corrected.append(age_corrected)
         age_gap.append(ages[i] - age_corrected)
         age_gap_abs.append(abs(ages[i] - age_corrected))
