@@ -1,4 +1,4 @@
-""" Functions to interact with the vantage6 API
+""" Functions to interact with the Vantage6 API.
 """
 import time
 

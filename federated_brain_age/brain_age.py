@@ -29,7 +29,8 @@ DEFAULT_HYPERPARAMETERS = {
     AUGMENT_TRAIN: False,
     IMG_SCALE: 1.0,
     BATCH_SIZE: 4,
-    PATIENTS_PER_EPOCH: 4, # steps_per_epoch = patients_per_epoch / batch_size
+    # steps_per_epoch = patients_per_epoch / batch_size
+    PATIENTS_PER_EPOCH: 4,
     EPOCHS: 4,
     DROPOUT: 0.2,
     STARTING_STEP: 0,
@@ -39,6 +40,7 @@ DEFAULT_HYPERPARAMETERS = {
     USE_MASK: True,
     KFOLD: 0,
     K: 0,
+    LOSS: 'mean_squared_error'
 }
 
 DEFAULT_MASK_NAME = "Brain_GM_mask_1mm_MNI_kNN_conservative.nii.gz"
@@ -87,7 +89,7 @@ class BrainAge:
     
     @staticmethod
     def get_metrics(loader, y_pred, prefix=''):
-        """ Calculate the metrics.
+        """ Calculate the metrics (MAE, MSE) and the age gap for each participant.
         """
         metrics = {}
         # Initialize the metrics
@@ -180,11 +182,10 @@ class BrainAge:
             #decay = parameters(DECAY),
         )
         model.compile(
-            loss='mean_squared_error',
+            loss=parameters(LOSS),
             optimizer=adam_opt,
             metrics=['mae', 'mse']
         )
-        
         return model
 
     def get_parameter(self, parameter):
@@ -278,7 +279,7 @@ class BrainAge:
         )
 
     def predict(self, data_loader = None):
-        """ Make the predictions for the data
+        """ Make the predictions for the data used to train/validate or a data loader provided.
         """
         predictions_by_participant = {}
         # Load the parameters

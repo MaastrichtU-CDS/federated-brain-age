@@ -50,12 +50,16 @@ def read_csv(path, header = 0, column_names = None, separator = ",",
     return data
 
 def check_errors(results):
+    """ Parse the errors obtained from the results.
+    """
     output = None
     if any([ERROR in result for result in results]):
         output = [result[ERROR] for result in results if ERROR in result]
     return output
 
 def validate_parameters(input, parameters):
+    """ Identify the parameters missing.
+    """
     missing_parameters = []
     for parameter in parameters.keys():
         if parameter not in input:
@@ -65,6 +69,9 @@ def validate_parameters(input, parameters):
     return missing_parameters
 
 def np_array_to_list(array):
+    """ Convert a numpy array to a list.
+        Necessary to send the results back to the client.
+    """
     parsed_list = []
     if type(array) is list:
         for element in array:

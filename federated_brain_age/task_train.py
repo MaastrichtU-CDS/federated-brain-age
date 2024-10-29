@@ -14,9 +14,90 @@ from federated_brain_age.utils import np_array_to_list, check_errors
 from federated_brain_age.db_builder import *
 from federated_brain_age.server_handler import execute_task, get_result
 
+def retrieve_model(parameters, db_client):
+    """ If the model is not yet stored in the database, it stores the model
+        according to the parameters provided.
+        If the model already exists, it retrieves the information (seed, data
+        split, and weights from the last run) to continue the training.
+    """
+    model_info = {
+        ID: parameters[MODEL_ID],
+        SEED: parameters.get(SEED),
+        ROUND: 0,
+        WEIGHTS: None,
+        DATA_SPLIT: parameters[MODEL][DATA_SPLIT],
+    }
+    result = get_model_by_id(parameters[MODEL_ID], db_client)
+    if result:
+        info("Get existing model")
+        model_info[SEED] = result[2]
+        model_info[DATA_SPLIT] = result[3]
+        last_run = get_last_run_by_id(parameters[MODEL_ID], db_client)
+        if last_run:
+            run_id = last_run[0]
+            model_info[ROUND] = last_run[3]
+            model_info[WEIGHTS] = last_run[4]
+    else:
+        # Insert a new entry for the model
+        info("Insert the new model")
+        model_info[SEED] = parameters.get(SEED) if \
+            parameters.get(SEED) is not None else random.randint(0, 1000000)
+        insert_model(model_info[ID], model_info[SEED], model_info[DATA_SPLIT], db_client)
+    return model_info
+
+
+def aggregate_metrics(output_data, output, tasks):
+    """ Aggregate the metrics from the training.
+    """
+    metrics = {
+        GLOBAL: {}
+    }
+    metrics_aggregator = {
+        MAE: [],
+        MSE: [],
+        VAL_MAE: [],
+        VAL_MSE: [],
+    }
+    predictions = {}
+    age_gap = {}
+    sample_size_training = [result[SAMPLE_SIZE][0] for result in output_data]
+    sample_size_validation = [result[SAMPLE_SIZE][1] for result in output_data]
+    info(
+        "Total number of samples for training and validation: " + 
+            f"{sum(sample_size_training)}, {sum(sample_size_validation)}"
+    )
+    # Collect the metrics by organization
+    for task_id, result in output.items():
+        metrics[task_id] = {
+            ORGANIZATION_ID: tasks[task_id][ORGANIZATION_ID],
+            HISTORY: result[HISTORY],
+            METRICS: result[METRICS],
+            SAMPLE_SIZE: result[SAMPLE_SIZE]
+        }
+        predictions[tasks[task_id][ORGANIZATION_ID]] = result.get(PREDICTIONS, [])
+        age_gap[tasks[task_id][ORGANIZATION_ID]] = result.get(AGE_GAP, [])
+        for metric in metrics_aggregator.keys():
+            if metric in result[METRICS] and len(result[METRICS][metric]) > 0:
+                metrics_aggregator[metric].append(result[METRICS][metric][0])
+            else:
+                warn(
+                    f"Metric {metric} not found in the results from the node with " +
+                        f"id {metrics[task_id][ORGANIZATION_ID]}"
+                )
+    for metric in metrics_aggregator.keys():
+        weights = sample_size_training
+        if 'val' in metric:
+            weights = sample_size_validation
+        if len(metrics_aggregator[metric]) > 0 and sum(weights) > 0:
+            metrics[GLOBAL][metric] = np.average(metrics_aggregator[metric], weights=weights)
+        else:
+            metrics[GLOBAL][metric] = -1
+    return metrics, predictions, age_gap, sample_size_training, sample_size_validation
 
 def task_train(parameters, ids, algorithm_image, db_client, client):
-    # Recover the previous state if requested
+    """ Prepare the parameters and send the task to the cohorts. Recover the previous state 
+        if the model is already stored in the database.
+    """
     model_info = {
         ID: None,
         SEED: parameters.get(SEED),
@@ -31,22 +112,7 @@ def task_train(parameters, ids, algorithm_image, db_client, client):
         if MODEL_ID in parameters:
             model_info[ID] = parameters[MODEL_ID]
             try:
-                result = get_model_by_id(parameters[MODEL_ID], db_client)
-                if result:
-                    info("Get existing model")
-                    model_info[SEED] = result[2]
-                    model_info[DATA_SPLIT] = result[3]
-                    last_run = get_last_run_by_id(parameters[MODEL_ID], db_client)
-                    if last_run:
-                        run_id = last_run[0]
-                        model_info[ROUND] = last_run[3]
-                        model_info[WEIGHTS] = last_run[4]
-                else:
-                    # Insert a new entry for the model
-                    info("Insert the new model")
-                    model_info[SEED] = parameters.get(SEED) if \
-                        parameters.get(SEED) is not None else random.randint(0, 1000000)
-                    insert_model(model_info[ID], model_info[SEED], model_info[DATA_SPLIT], db_client)
+                model_info = retrieve_model(parameters, db_client)
             except Exception as error:
                 error_message = f"Unable to connect to the database and retrieve the model: {str(error)}"
                 warn(error_message)
@@ -146,49 +212,7 @@ def task_train(parameters, ids, algorithm_image, db_client, client):
             warn("Encountered an error, please review the parameters")
             return { ERROR: errors }
         info("Aggregating the results")
-        metrics = {
-            GLOBAL: {}
-        }
-        metrics_aggregator = {
-            MAE: [],
-            MSE: [],
-            VAL_MAE: [],
-            VAL_MSE: [],
-        }
-        predictions = {}
-        age_gap = {}
-        sample_size_training = [result[SAMPLE_SIZE][0] for result in output_data]
-        sample_size_validation = [result[SAMPLE_SIZE][1] for result in output_data]
-        info(
-            "Total number of samples for training and validation: " + 
-                f"{sum(sample_size_training)}, {sum(sample_size_validation)}"
-        )
-        # Collect the metrics by organization
-        for task_id, result in output.items():
-            metrics[task_id] = {
-                ORGANIZATION_ID: tasks[task_id][ORGANIZATION_ID],
-                HISTORY: result[HISTORY],
-                METRICS: result[METRICS],
-                SAMPLE_SIZE: result[SAMPLE_SIZE]
-            }
-            predictions[tasks[task_id][ORGANIZATION_ID]] = result.get(PREDICTIONS, [])
-            age_gap[tasks[task_id][ORGANIZATION_ID]] = result.get(AGE_GAP, [])
-            for metric in metrics_aggregator.keys():
-                if metric in result[METRICS] and len(result[METRICS][metric]) > 0:
-                    metrics_aggregator[metric].append(result[METRICS][metric][0])
-                else:
-                    warn(
-                        f"Metric {metric} not found in the results from the node with " +
-                            f"id {metrics[task_id][ORGANIZATION_ID]}"
-                    )
-        for metric in metrics_aggregator.keys():
-            weights = sample_size_training
-            if 'val' in metric:
-                weights = sample_size_validation
-            if len(metrics_aggregator[metric]) > 0 and sum(weights) > 0:
-                metrics[GLOBAL][metric] = np.average(metrics_aggregator[metric], weights=weights)
-            else:
-                metrics[GLOBAL][metric] = -1
+        metrics, predictions, age_gap, n_training, n_validation = aggregate_metrics(output_data, output, tasks)
         results[METRICS][i] = metrics
         # Store the results
         if store_model:
@@ -212,7 +236,7 @@ def task_train(parameters, ids, algorithm_image, db_client, client):
                 db_client
             )
         # Update the model weights
-        total_training_samples = sum(sample_size_training)
+        total_training_samples = sum(n_training)
         brain_age_weights_update = []
         models_parsed = []
         # Perform a weighted average of give the same weight to all participants

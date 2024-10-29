@@ -1,3 +1,9 @@
+"""
+Loss History
+Extend the keras class to keep track of the metrics and identify
+the model with lower MAE.
+"""
+
 import os
 
 from tensorflow import keras

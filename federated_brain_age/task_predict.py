@@ -15,7 +15,7 @@ from federated_brain_age.server_handler import execute_task, get_result
 from federated_brain_age.utils import np_array_to_list
 
 def predict(parameters, ids, algorithm_image, db_client, client):
-    """ Send the task to predict the brain age
+    """ Send the task to predict the brain age.
     """
     # Retrieve the necessary data from the database
     model_info = {
@@ -93,6 +93,8 @@ def predict(parameters, ids, algorithm_image, db_client, client):
         }
 
 def task_predict_locally(parameters, weights, data_seed, seed, data_split, db_client):
+    """ Execute the task to predict the brain age.
+    """
     output = {
         PREDICTIONS: {},
         METRICS: {},
@@ -128,11 +130,11 @@ def task_predict_locally(parameters, weights, data_seed, seed, data_split, db_cl
                 np.array(weights_by_layer, dtype=np.double) for weights_by_layer in json.loads(weights)
             ]
             brain_age.model.set_weights(parsed_weights)
-        # Predict
         info("Predict")
         data_loader = None
         # More generically it could be a "Dataset" field
         if IS_TRAINING_DATA in parameters and not parameters[IS_TRAINING_DATA]:
+            # Testing set
             data_loader = DataLoader(
                 brain_age.images_path,
                 parameters[DB_TYPE],
@@ -161,6 +163,7 @@ def task_predict_locally(parameters, weights, data_seed, seed, data_split, db_cl
             else:
                 raise Exception("No participants found for the prediction dataset requested")
         else:
+            # Training and validation set
             output[DATASET] = [TRAIN, VALIDATION]
             output[SAMPLE_SIZE] = [
                 len(brain_age.train_loader.participants), len(brain_age.validation_loader.participants)

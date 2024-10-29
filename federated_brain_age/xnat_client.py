@@ -4,7 +4,8 @@ import xnat
 from federated_brain_age.constants import *
 
 def retrieve_data(path):
-    # Retrieve the data from XNAT to a local folder
+    """ Retrieve the data from XNAT to a local folder
+    """
     with xnat.connect(os.getenv(XNAT_URL), user=os.getenv(XNAT_USER), password=os.getenv(XNAT_PASSWORD)) as session:
         project = session.projects[os.getenv(XNAT_PROJECT)]
         for subject_id in project.subjects:
