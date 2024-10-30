@@ -12,7 +12,7 @@ from federated_brain_age.brain_age import BrainAge, DEFAULT_HYPERPARAMETERS
 from federated_brain_age.constants import *
 from federated_brain_age.utils import np_array_to_list, check_errors
 from federated_brain_age.db_builder import *
-from federated_brain_age.server_handler import execute_task, get_result
+from federated_brain_age import server_handler
 
 def retrieve_model(parameters, db_client):
     """ If the model is not yet stored in the database, it stores the model
@@ -27,6 +27,7 @@ def retrieve_model(parameters, db_client):
         WEIGHTS: None,
         DATA_SPLIT: parameters[MODEL][DATA_SPLIT],
     }
+    run_id = None
     result = get_model_by_id(parameters[MODEL_ID], db_client)
     if result:
         info("Get existing model")
@@ -43,7 +44,7 @@ def retrieve_model(parameters, db_client):
         model_info[SEED] = parameters.get(SEED) if \
             parameters.get(SEED) is not None else random.randint(0, 1000000)
         insert_model(model_info[ID], model_info[SEED], model_info[DATA_SPLIT], db_client)
-    return model_info
+    return model_info, run_id
 
 
 def aggregate_metrics(output_data, output, tasks):
@@ -112,7 +113,7 @@ def task_train(parameters, ids, algorithm_image, db_client, client):
         if MODEL_ID in parameters:
             model_info[ID] = parameters[MODEL_ID]
             try:
-                model_info = retrieve_model(parameters, db_client)
+                model_info, run_id = retrieve_model(parameters, db_client)
             except Exception as error:
                 error_message = f"Unable to connect to the database and retrieve the model: {str(error)}"
                 warn(error_message)
@@ -192,12 +193,12 @@ def task_train(parameters, ids, algorithm_image, db_client, client):
                 task_id = parameters[RESTART_TRAINING][org_id]
                 info(f"Restarting the training for organizaion {str(org_id)} using task id {str(task_id)}")
             else:
-                task_id = execute_task(client, input, [org_id], algorithm_image)
+                task_id = server_handler.execute_task(client, input, [org_id], algorithm_image)
             if task_id:
                 tasks[task_id] = {
                     ORGANIZATION_ID: org_id
                 }
-        output = get_result(
+        output = server_handler.get_result(
             client,
             tasks,
             max_number_tries=parameters.get(MAX_NUMBER_TRIES) or DEFAULT_MAX_NUMBER_TRIES,

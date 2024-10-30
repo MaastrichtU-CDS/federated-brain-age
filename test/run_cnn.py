@@ -1,4 +1,7 @@
-# Test the brain age algorithm
+""" Script to train the BrainAge model directly. It won't perform 
+    any of the federated learning (Vantage6) calls or tasks (e.g., 
+    running the models at different organizations, merging the results)
+"""
 import os
 import random
 

@@ -227,7 +227,11 @@ class DataLoader:
             data = []
             for batch in range(0, len(patient_sublist)):
                 #get the data of a batch samples/patients
-                data.append(self.generate_batch(patient_sublist[batch], img_size, img_scale, mask, mode, crop, down_size=self.down_size))
+                data.append(
+                    self.generate_batch(
+                        patient_sublist[batch], img_size, img_scale, mask, mode, crop
+                    )
+                )
                 count = count + len(patient_sublist[batch])
                 #yield the data and pop for memory clearing
                 yield data.pop()

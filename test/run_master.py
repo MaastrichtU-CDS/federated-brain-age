@@ -1,3 +1,9 @@
+""" Script to simulate running the algorithm at one or more cohorts
+    for several rounds. It mocks calls to the Vantage6 client but
+    performs the training with the data provided (expects a csv file 
+    with the data - example provided).
+"""
+
 import os
 import importlib
 
@@ -79,14 +85,15 @@ def mock_get_result(client, tasks, max_number_tries, sleep_time):
         )
     return output
 
-@patch("federated_brain_age.execute_task", wraps=mock_execute_task)
-@patch("federated_brain_age.get_orgarnization", wraps=mock_get_orgarnization)
-@patch("federated_brain_age.get_result", wraps=mock_get_result)
+@patch("federated_brain_age.server_handler.execute_task", wraps=mock_execute_task)
+@patch("federated_brain_age.server_handler.get_orgarnization", wraps=mock_get_orgarnization)
+@patch("federated_brain_age.server_handler.get_result", wraps=mock_get_result)
 @patch.dict(os.environ, {DATA_FOLDER: DATA_PATH})
 def test_master_train(mock_bar, mock_bar2, mock_bar3):
     # with patch("federated_brain_age.execute_task", wraps=mock_f) as mock_bar:
-    master_method = getattr(lib, "master")
-    result = master_method(None, None, PARAMETERS)
+    master_method = getattr(lib, "task_train")
+    # parameters, ids, algorithm_image, db_client, client
+    result = master_method(PARAMETERS, [1], None, None, None)
     for key in result.keys():
         if key != WEIGHTS:
             print(key)

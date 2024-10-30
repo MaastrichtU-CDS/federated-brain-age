@@ -1,6 +1,9 @@
-# Local run to test the algorithm using a local RDB to store the models
-# and results.
-
+""" Script to simulate running the algorithm at one or more cohorts
+    for several rounds. It mocks calls to the Vantage6 client but
+    performs the training with the data provided (expects a csv file 
+    with the data - example provided). It expects a RDB to store the 
+    models - thus, it;s possible to test restarting a training.
+"""
 import os
 import importlib
 from unittest.mock import Mock, patch
@@ -13,7 +16,7 @@ DATA_PATH = "/mnt"
 
 PARAMETERS = {
     TASK: TRAIN,
-    MODEL_ID: "test21",
+    MODEL_ID: "test",
     SAVE_MODEL: True,
     DB_TYPE: DB_CSV,
     MAX_NUMBER_TRIES: 10,
@@ -21,11 +24,11 @@ PARAMETERS = {
     HISTORY: True,
     MODEL: {
         MASTER: {
-            ROUNDS: 4
+            ROUNDS: 2
         },
         NODE: {
             USE_MASK: True,
-            EPOCHS: 3,
+            EPOCHS: 1,
             PATIENTS_PER_EPOCH: 4,
             BATCH_SIZE: 4,
         },
@@ -72,13 +75,13 @@ def mock_get_result(client, tasks, max_number_tries, sleep_time):
         )
     return output
 
-@patch("federated_brain_age.execute_task", wraps=mock_execute_task)
-@patch("federated_brain_age.get_orgarnization", wraps=mock_get_orgarnization)
-@patch("federated_brain_age.get_result", wraps=mock_get_result)
+@patch("federated_brain_age.server_handler.execute_task", wraps=mock_execute_task)
+@patch("federated_brain_age.server_handler.get_orgarnization", wraps=mock_get_orgarnization)
+@patch("federated_brain_age.server_handler.get_result", wraps=mock_get_result)
 @patch.dict(os.environ, {DATA_FOLDER: DATA_PATH})
 def test_master_train(mock_bar, mock_bar2, mock_bar3):
     # with patch("federated_brain_age.execute_task", wraps=mock_f) as mock_bar:
-    master_method = getattr(lib, "master")
+    master_method = getattr(lib, "task_train")
     # Connection to the local postgres database running on your laptop
     # (not in a docker container, in that case, replace host.docker.internal with the
     # container's address)
@@ -86,7 +89,7 @@ def test_master_train(mock_bar, mock_bar2, mock_bar3):
     connection = psycopg2.connect("postgresql://user:password@host.docker.internal:5432/DB")
     db_client = connection.cursor()
     #try:
-    result = master_method(None, db_client, PARAMETERS)
+    result = master_method(PARAMETERS, [1], None, db_client, None)
     for key in result.keys():
         if key != WEIGHTS:
             print(key)
