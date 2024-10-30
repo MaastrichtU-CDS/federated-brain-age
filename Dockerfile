@@ -1,5 +1,6 @@
-# vantage6 base image
-FROM harbor.vantage6.ai/algorithms/algorithm-base
+# Vantage6 base image is no longer available
+# FROM harbor.vantage6.ai/algorithms/algorithm-base
+FROM pmateus/algorithm-base:1.0.0
 
 ARG PKG_NAME="federated_brain_age"
 
