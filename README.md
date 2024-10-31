@@ -24,7 +24,7 @@ The CNN was based on the implementation from the following [repository](https://
 
 The federated architecture for this project follows the Personal Health Train (PHT) concept. Each participating organization keeps the data locally, only sharing aggregated information that doesn't disclose individual-level data.
 
-In practice, we installed [Vantage6](https://distributedlearning.ai) in each node (one for each cohort) which provided the necessary tools to establish the connection (a server controls the communication with each cohort via https). Since the CNN training required more intensive computation and GPU resources are not continuously available for a single project, we developed an extension of the Vantage6 node Docker image (`/v6_wrapper`) to use high performance computing (HPC)/GPU clusters in each cohort. In this version, a wrapper is specifically created for each cohort, which comunicates with the HPC/GPU cluster to perform the training when necessary. Such solution was necessary since each cluster had a different platform available (e.g., openshift cluster, singularity based cluster).
+In practice, we installed [Vantage6](https://distributedlearning.ai) in each node (one for each cohort) which provided the necessary tools to establish the connection (a server controls the communication with each cohort via https). Since the CNN training required more intensive computation and GPU resources are not continuously available for a single project, we developed an extension of the Vantage6 node Docker image ([/v6_wrapper](/v6_wrapper)) to use high performance computing (HPC)/GPU clusters in each cohort. In this version, a wrapper is specifically created for each cohort, which comunicates with the HPC/GPU cluster to perform the training when necessary. Such solution was necessary since each cluster had a different platform available (e.g., openshift cluster, singularity based cluster).
 
 We performed this work using Vantage6 version 2.1.0 for the node (python libraries: `vantage6==2.1.1`, `vantage6-node==2.1.0`, `vantage6-client==2.1.0`, `vantage6-common==2.1.0`).
 
@@ -33,7 +33,7 @@ We performed this work using Vantage6 version 2.1.0 for the node (python librari
 Facilitating the process of training an algorithm using a federated approach requires a certain level of harmonization between the data in each center.
 To accomplish this, the data is expected to follow a similar structure:
 * Imaging data: Results from the pre-processing pipeline should be available directly in the cluster.
-* Clinical data: Available in a CSV file with the following columns: `id,clinical_id,imaging_id,age,sex,is_training_data` (example provided in `/test/example/clinical_data.csv`).
+* Clinical data: Available in a CSV file with the following columns: `id,clinical_id,imaging_id,age,sex,is_training_data` (example provided in [/test/example/clinical_data.csv](/test/example/clinical_data.csv)).
 
 ## Build Docker Image
 
@@ -42,11 +42,11 @@ To build the docker image for GPU (based on the tensorflow docker image), run th
 
 ## Running
 
-Vantage6 is used to implement the PHT infrastructure, implying dependencies on this library (e.g., communication between nodes and server) in the algorithm implementation. However, as demonstrated by the examples (`/test/run_cnn.py`), it's simple to decouple the algorithm core and adapt to a different infrastructure.
+Vantage6 is used to implement the PHT infrastructure, implying dependencies on this library (e.g., communication between nodes and server) in the algorithm implementation. However, as demonstrated by the examples ([/test/run_cnn.py](/test/run_cnn.py)), it's simple to decouple the algorithm core and adapt to a different infrastructure.
 
 ### Vantage6
 
-An example on how to send a new task using Vantage6 is provided in `/examples/new_task_v6.py`
+An example on how to send a new task using Vantage6 is provided in [/scripts/new_task_v6.py](/scripts/new_task_v6.py)
 
 Parameter description:
 - TASK: task to execute (TRAIN, CHECK, PREDICT);
@@ -93,7 +93,7 @@ PARAMETERS = {
 There are two possible approaches to test the algorithm locally:
 - Running the vantage6 infrastructure locally and sending a task to execute the algorithm;
 - Running the algorithm by mocking the calls to the vantage6 API:
-An example using docker is provided (`/federated_brain_age/test/docker-compose.yaml`) allowing to run the algorithm simulating the federated architecture.
+An example using docker is provided ([/federated_brain_age/test/docker-compose.yaml](/federated_brain_age/test/docker-compose.yaml)) allowing to run the algorithm simulating the federated architecture.
 To be able to run the example, the path to the imaging data, clinical data, and brain mask should be provided in the docker compose file.
 Running `docker-compose brain-age` will create a container with the necessary dependencies. Once within the container, the command `python3 run_master.py` will start the training with the data provided.
 
