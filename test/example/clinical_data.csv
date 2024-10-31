@@ -1,0 +1,8 @@
+id,clinical_id,imaging_id,age,sex,is_training_data
+2a,2a,2a,34.2,1,1
+3a,3a,3a,78,0,1
+4a,4a,4a,67.8,1,1
+5b,5b,5b,95,0,1
+6d,6d,6d,73,1,1
+7a,7a,7a,82.2,1,1
+8a,8a,8a,83.0,0,1
