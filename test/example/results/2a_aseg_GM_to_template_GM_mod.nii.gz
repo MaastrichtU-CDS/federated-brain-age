@@ -1,0 +1,3 @@
+# Example on how to structure the imaging files.
+# The filename should follow: <imaging_id>_<image_suffix>
+# The image suffix can be changed using the following environment variable: IMAGE_SUFFIX
