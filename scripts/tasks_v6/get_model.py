@@ -16,32 +16,22 @@ input_ = {
     "output_format": "json",
     "kwargs": {
         "parameters": {
-            "TASK": "predict",
-            "MODEL_ID": "model_id",
-            "SAVE_MODEL": True,
+            "TASK": "get_model",
+            "MODEL_ID": "model-id",
+            "SLEEP_TIME": 30,
             "DB_TYPE": "CSV",
             "MAX_NUMBER_TRIES": 1000,
-            "SLEEP_TIME": 30,
-            "HISTORY": True,
-            "is_training_data": True,
-            # Select the round
+            "SLEEP_TIME": 60,
             "ROUND": 5,
-            "MODEL": {
-                "NODE": {
-                    "USE_MASK": True,
-                    "BATCH_SIZE": 4,
-                    "PATIENTS_PER_EPOCH": 1000,
-                },
-            }
         },
-        "org_ids": [2]
+        "org_ids": [4]
     }
 }
 
 print("Requesting to execute summary algorithm")
 task = client.post_task(
-    name="testing-all",
-    image="gpu_image",
+    name="task-check",
+    image="pmateus/brain-age-gpu:1.0.0",
     collaboration_id=1,
     input_= input_,
     organization_ids=[4]
@@ -53,7 +43,7 @@ attempts=1
 print(task.get("id"))
 while((res[0]["result"] == None) and attempts < 300):
     print("waiting...")
-    time.sleep(30)
+    time.sleep(10)
     res = client.get_results(task_id=task.get("id"))
     attempts += 1
 print(res[0]["result"])
